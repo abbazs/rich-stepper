@@ -12,33 +12,70 @@ from stepper import (
     Stepper,
     StepperTheme,
 )
-from stepper.columns import HeightAwareLogRenderable, StepperTimeColumn
+from stepper.columns import LogRenderer, StatusMapper, StepperTimeColumn
 
 
 # ---------------------------------------------------------------------------
-# StepIndicatorColumn tests
+# StatusMapper tests
 # ---------------------------------------------------------------------------
 
 
-def test_indicator_symbol_for_completed() -> None:
-    theme = StepperTheme()
-    col = StepIndicatorColumn(theme)
-    result = col._symbol_for(StepStatus.COMPLETED)
-    assert result == (theme.completed_symbol, theme.completed_style)
+def test_status_mapper_returns_correct_symbol_and_style() -> None:
+    theme = StepperTheme(
+        completed_symbol="C",
+        completed_style="green",
+        active_symbol="A",
+        active_style="cyan",
+        pending_symbol="P",
+        pending_style="dim",
+    )
+    mapper = StatusMapper(theme)
+    assert mapper.symbol_and_style(StepStatus.COMPLETED) == ("C", "green")
+    assert mapper.symbol_and_style(StepStatus.ACTIVE) == ("A", "cyan")
+    assert mapper.symbol_and_style(StepStatus.PENDING) == ("P", "dim")
 
 
-def test_indicator_symbol_for_active() -> None:
-    theme = StepperTheme()
-    col = StepIndicatorColumn(theme)
-    result = col._symbol_for(StepStatus.ACTIVE)
-    assert result == (theme.active_symbol, theme.active_style)
+def test_status_mapper_style_shortcut() -> None:
+    theme = StepperTheme(completed_style="bold green")
+    mapper = StatusMapper(theme)
+    assert mapper.style(StepStatus.COMPLETED) == "bold green"
 
 
-def test_indicator_symbol_for_pending() -> None:
-    theme = StepperTheme()
-    col = StepIndicatorColumn(theme)
-    result = col._symbol_for(StepStatus.PENDING)
-    assert result == (theme.pending_symbol, theme.pending_style)
+# ---------------------------------------------------------------------------
+# LogRenderer tests
+# ---------------------------------------------------------------------------
+
+
+def test_log_renderer_visible_count_fixed() -> None:
+    theme = StepperTheme(max_log_rows=3)
+    renderer = LogRenderer(theme)
+    assert renderer.visible_count(10, None) == 3
+
+
+def test_log_renderer_visible_count_unbounded() -> None:
+    theme = StepperTheme(max_log_rows=None)
+    renderer = LogRenderer(theme)
+    assert renderer.visible_count(10, 5) == 5
+
+
+def test_log_renderer_visible_count_zero() -> None:
+    theme = StepperTheme(max_log_rows=0)
+    renderer = LogRenderer(theme)
+    assert renderer.visible_count(10, None) == 0
+
+
+def test_log_renderer_visible_count_no_logs() -> None:
+    theme = StepperTheme(max_log_rows=5)
+    renderer = LogRenderer(theme)
+    assert renderer.visible_count(0, None) == 0
+
+
+def test_log_renderer_build_lines_with_prefix() -> None:
+    theme = StepperTheme(log_prefix="->", label_padding=2)
+    renderer = LogRenderer(theme)
+    lines = renderer.build_lines(["hello"], None)
+    assert len(lines) == 1
+    assert "-> hello" in lines[0].plain
 
 
 # ---------------------------------------------------------------------------
@@ -58,24 +95,6 @@ def test_label_merge_styles_single() -> None:
     assert StepLabelColumn._merge_styles("bold") == "bold"
 
 
-def test_label_status_style_completed() -> None:
-    theme = StepperTheme()
-    col = StepLabelColumn(theme)
-    assert col._status_style(StepStatus.COMPLETED) == theme.completed_style
-
-
-def test_label_status_style_active() -> None:
-    theme = StepperTheme()
-    col = StepLabelColumn(theme)
-    assert col._status_style(StepStatus.ACTIVE) == theme.active_style
-
-
-def test_label_status_style_pending() -> None:
-    theme = StepperTheme()
-    col = StepLabelColumn(theme)
-    assert col._status_style(StepStatus.PENDING) == theme.pending_style
-
-
 # ---------------------------------------------------------------------------
 # StepperTimeColumn tests
 # ---------------------------------------------------------------------------
@@ -89,7 +108,6 @@ def test_elapsed_time_shows_for_active_step() -> None:
     stepper.add_step("Active Step", status=StepStatus.ACTIVE)
     console.print(stepper)
     output = console.export_text()
-    # Active step should show time format like "0:00:00"
     assert "0:00:00" in output
 
 
@@ -113,7 +131,6 @@ def test_elapsed_time_freezes_on_completion() -> None:
     stepper.set_step_status(0, StepStatus.COMPLETED)
     console.print(stepper)
     output = console.export_text()
-    # Completed step should show a time value (frozen), not "-:--:--"
     assert "-:--:--" not in output
 
 
@@ -125,34 +142,6 @@ def test_time_column_custom_style() -> None:
     stepper.add_step("Styled Step", status=StepStatus.PENDING)
     console.print(stepper)
     output = console.export_text()
-    # The time dash should appear regardless of style
     assert "-:--:--" in output
-    # Verify the column was created with custom style
     time_col = StepperTimeColumn(theme)
     assert time_col._theme.time_style == "bold magenta"
-
-
-# ---------------------------------------------------------------------------
-# HeightAwareLogRenderable tests
-# ---------------------------------------------------------------------------
-
-
-def test_height_aware_renderable_empty_logs() -> None:
-    """Empty logs list returns nothing (no yield)."""
-    console = Console(record=True, width=80, legacy_windows=False)
-    theme = StepperTheme()
-    renderable = HeightAwareLogRenderable([], theme)
-    with console.capture() as capture:
-        console.print(renderable)
-    assert capture.get().strip() == ""
-
-
-def test_height_aware_renderable_zero_max_rows() -> None:
-    """max_log_rows=0 returns nothing regardless of log content."""
-    console = Console(record=True, width=80, legacy_windows=False)
-    theme = StepperTheme(max_log_rows=0)
-    logs = ["msg1", "msg2", "msg3"]
-    renderable = HeightAwareLogRenderable(logs, theme)
-    with console.capture() as capture:
-        console.print(renderable)
-    assert capture.get().strip() == ""

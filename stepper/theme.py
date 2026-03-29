@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from stepper.types import StepStatus
+from stepper.types import LogPosition, StepStatus
 
 
 @dataclass(frozen=True)
@@ -27,7 +27,7 @@ class StepperTheme:
     bar_complete_style: str = "bar.complete"
     bar_finished_style: str = "bar.finished"
     bar_pulse_style: str = "bar.pulse"
-    log_position: str = "below"
+    log_position: LogPosition = LogPosition.BELOW
     max_log_rows: int | None = None
     log_style: str = "dim italic"
     log_prefix: str = "›"

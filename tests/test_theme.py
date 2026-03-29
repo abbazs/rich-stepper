@@ -7,6 +7,7 @@ from dataclasses import FrozenInstanceError
 import pytest
 
 from stepper import (
+    LogPosition,
     StepDefinition,
     StepStatus,
     StepperTheme,
@@ -68,7 +69,7 @@ def test_theme_new_field_defaults() -> None:
     assert theme.bar_finished_style == "bar.finished"
     assert theme.bar_pulse_style == "bar.pulse"
     # Logging fields
-    assert theme.log_position == "below"
+    assert theme.log_position is LogPosition.BELOW
     assert theme.max_log_rows is None
     assert theme.log_style == "dim italic"
     assert theme.log_prefix == "›"
@@ -84,7 +85,7 @@ def test_theme_new_field_custom() -> None:
         bar_complete_style="green bold",
         bar_finished_style="green",
         bar_pulse_style="red",
-        log_position="above",
+        log_position=LogPosition.ABOVE,
         max_log_rows=5,
         log_style="cyan",
         log_prefix="→",
@@ -96,7 +97,7 @@ def test_theme_new_field_custom() -> None:
     assert theme.bar_complete_style == "green bold"
     assert theme.bar_finished_style == "green"
     assert theme.bar_pulse_style == "red"
-    assert theme.log_position == "above"
+    assert theme.log_position is LogPosition.ABOVE
     assert theme.max_log_rows == 5
     assert theme.log_style == "cyan"
     assert theme.log_prefix == "→"
@@ -144,3 +145,8 @@ def test_step_status_value_strings() -> None:
     assert StepStatus.COMPLETED.value == "completed"
     assert StepStatus.ACTIVE.value == "active"
     assert StepStatus.PENDING.value == "pending"
+
+
+def test_log_position_enum_values() -> None:
+    assert LogPosition.BELOW.value == "below"
+    assert LogPosition.ABOVE.value == "above"

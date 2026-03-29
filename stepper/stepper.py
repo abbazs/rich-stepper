@@ -3,9 +3,11 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from rich.console import Console
-from rich.progress import Progress, TaskID
+from rich.progress import Progress, ProgressColumn, TaskID
 
 from stepper.columns import (
+    LogRenderer,
+    StatusMapper,
     StepIndicatorColumn,
     StepLabelColumn,
     StepperTimeColumn,
@@ -33,8 +35,31 @@ class Stepper(Progress):
     ) -> None:
         self.theme = theme or StepperTheme()
         self._step_task_ids: list[TaskID] = []
-        # Column order: indicator → label → bar → time (logs render inside label column)
-        columns = [StepIndicatorColumn(self.theme), StepLabelColumn(self.theme)]
+        self._status = StatusMapper(self.theme)
+        self._log = LogRenderer(self.theme)
+        super().__init__(
+            *self._build_columns(),
+            console=console,
+            auto_refresh=auto_refresh,
+            refresh_per_second=refresh_per_second,
+            speed_estimate_period=speed_estimate_period,
+            transient=transient,
+            redirect_stdout=redirect_stdout,
+            redirect_stderr=redirect_stderr,
+            get_time=get_time,
+            disable=disable,
+            expand=expand,
+            **kwargs,
+        )
+        self.log = self.__class__.log.__get__(self)  # type: ignore[method-assign]
+        if steps:
+            self.add_steps(steps)
+
+    def _build_columns(self) -> list[ProgressColumn]:
+        columns: list[ProgressColumn] = [
+            StepIndicatorColumn(self.theme, self._status, self._log),
+            StepLabelColumn(self.theme, self._status, self._log),
+        ]
         if self.theme.show_bar:
             from rich.progress import BarColumn
 
@@ -48,25 +73,7 @@ class Stepper(Progress):
             )
         if self.theme.show_elapsed_time:
             columns.append(StepperTimeColumn(self.theme))
-        super().__init__(
-            *columns,
-            console=console,
-            auto_refresh=auto_refresh,
-            refresh_per_second=refresh_per_second,
-            speed_estimate_period=speed_estimate_period,
-            transient=transient,
-            redirect_stdout=redirect_stdout,
-            redirect_stderr=redirect_stderr,
-            get_time=get_time,
-            disable=disable,
-            expand=expand,
-            **kwargs,
-        )
-        # Progress.__init__ sets self.log = self.console.log, shadowing our method.
-        # Restore the class method so Stepper.log() works as intended.
-        self.log = self.__class__.log.__get__(self)  # type: ignore[method-assign]
-        if steps:
-            self.add_steps(steps)
+        return columns
 
     def add_step(
         self,
@@ -78,10 +85,10 @@ class Stepper(Progress):
         total = 100
         completed = 100 if status is StepStatus.COMPLETED else 0
         task_id = self.add_task(label, total=total, completed=completed)
-        task = self._tasks[task_id]
         if self.theme.max_log_rows is None:
             height = self.console.height if self.console else 24
-            task._max_visible_logs = max(1, height - 4)  # type: ignore[attr-defined]
+            max_visible = max(1, height - 4)
+            self.update(task_id, max_visible_logs=max_visible)
         self._step_task_ids.append(task_id)
         self.update(
             task_id,
@@ -135,10 +142,6 @@ class Stepper(Progress):
         logs = list(task.fields.get("logs", []))
         logs.append(message)
         self.update(task_id, logs=logs)
-        if self.theme.max_log_rows is None:
-            height = self.console.height if self.console else 24
-            max_visible = max(1, height - 4)
-            task._max_visible_logs = max_visible  # type: ignore[attr-defined]
 
     def _sync_task_fields(self) -> None:
         total_steps = len(self._step_task_ids)

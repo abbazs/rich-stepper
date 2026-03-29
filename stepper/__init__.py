@@ -2,13 +2,13 @@ from stepper.columns import (
     StepIndicatorColumn,
     StepLabelColumn,
     StepperTimeColumn,
-    StepLogColumn,
 )
 from stepper.stepper import Stepper
 from stepper.theme import StepperTheme
-from stepper.types import StepDefinition, StepStatus
+from stepper.types import LogPosition, StepDefinition, StepStatus
 
 __all__ = [
+    "LogPosition",
     "StepDefinition",
     "StepIndicatorColumn",
     "StepLabelColumn",
@@ -16,5 +16,4 @@ __all__ = [
     "StepperTheme",
     "StepperTimeColumn",
     "StepStatus",
-    "StepLogColumn",
 ]

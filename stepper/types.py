@@ -10,6 +10,11 @@ class StepStatus(Enum):
     PENDING = "pending"
 
 
+class LogPosition(Enum):
+    BELOW = "below"
+    ABOVE = "above"
+
+
 @dataclass(frozen=True)
 class StepDefinition:
     label: str

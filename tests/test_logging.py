@@ -6,6 +6,7 @@ import pytest
 from rich.console import Console
 
 from stepper import (
+    LogPosition,
     StepStatus,
     Stepper,
     StepperTheme,
@@ -29,7 +30,7 @@ def test_log_message_appears_in_output() -> None:
 
 def test_log_position_below() -> None:
     console = Console(record=True, width=80, legacy_windows=False)
-    theme = StepperTheme(log_position="below")
+    theme = StepperTheme(log_position=LogPosition.BELOW)
     stepper = Stepper(console=console, auto_refresh=False, theme=theme)
     stepper.add_step("Alpha")
     stepper.log(0, "log line")
@@ -42,7 +43,7 @@ def test_log_position_below() -> None:
 
 def test_log_position_above() -> None:
     console = Console(record=True, width=80, legacy_windows=False)
-    theme = StepperTheme(log_position="above")
+    theme = StepperTheme(log_position=LogPosition.ABOVE)
     stepper = Stepper(console=console, auto_refresh=False, theme=theme)
     stepper.add_step("Alpha")
     stepper.log(0, "log line")
