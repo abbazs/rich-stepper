@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 packages = ["stepper"]
 
 [project]
-name = "stepper"
+name = "rich-stepper"
 version = "0.1.0"
 description = "Beautiful multi-step terminal progress widget for Rich. Connected indicators, per-step logging, elapsed timers, and optional progress bars."
 readme = "README.md"
@@ -36,11 +36,17 @@ dependencies = [
     "rich>=13.0.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pyright>=1.1.408",
+    "pytest>=9.0.2",
+]
+
 [project.urls]
-Homepage = "https://github.com/abbazs/stepper"
-Source = "https://github.com/abbazs/stepper"
-Issues = "https://github.com/abbazs/stepper/issues"
-Changelog = "https://github.com/abbazs/stepper/releases"
+Homepage = "https://github.com/abbazs/rich-stepper"
+Source = "https://github.com/abbazs/rich-stepper"
+Issues = "https://github.com/abbazs/rich-stepper/issues"
+Changelog = "https://github.com/abbazs/rich-stepper/releases"
 
 [dependency-groups]
 dev = [

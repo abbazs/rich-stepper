@@ -1,16 +1,15 @@
-# stepper
+# rich-stepper
 
-[![PyPI version](https://img.shields.io/pypi/v/stepper)](https://pypi.org/project/stepper)
-[![Python versions](https://img.shields.io/pypi/pyversions/stepper)](https://pypi.org/project/stepper)
-[![Downloads](https://img.shields.io/pepytech/badge/stepper)](https://pepy.tech/project/stepper)
-[![License](https://img.shields.io/pypi/l/stepper)](https://github.com/abbazs/stepper/blob/main/LICENSE)
+[![PyPI version](https://img.shields.io/pypi/v/rich-stepper)](https://pypi.org/project/rich-stepper)
+[![Python versions](https://img.shields.io/pypi/pyversions/rich-stepper)](https://pypi.org/project/rich-stepper)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/abbazs/rich-stepper/blob/main/LICENSE)
 
 Beautiful multi-step terminal progress widget for [Rich](https://rich.readthedocs.io/). Connected indicators, per-step logging, elapsed timers, and optional progress bars — all rendered live in your terminal.
 
 ## Installation
 
 ```
-pip install stepper
+pip install rich-stepper
 ```
 
 Requires Python 3.10+ and [Rich](https://pypi.org/project/rich/) 13+.
@@ -329,4 +328,4 @@ Status mapping and log rendering are handled by shared `StatusMapper` and `LogRe
 
 ## License
 
-[MIT](/abbazs/stepper/blob/main/LICENSE)
+[MIT](https://github.com/abbazs/rich-stepper/blob/main/LICENSE)
