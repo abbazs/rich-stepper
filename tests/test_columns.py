@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import time as time_mod
+from unittest.mock import MagicMock
+
 import pytest
-from rich.console import Console
+from rich.console import Console, Group
+from rich.progress import TaskID
+from rich.text import Text
 
 from stepper import (
     StepIndicatorColumn,
@@ -13,6 +18,35 @@ from stepper import (
     StepperTheme,
 )
 from stepper.columns import LogRenderer, StatusMapper, StepperTimeColumn
+
+
+def _make_task(
+    status: StepStatus = StepStatus.PENDING,
+    *,
+    is_last: bool = False,
+    logs: list[str] | None = None,
+    label: str = "Test Step",
+    step_description: str | None = None,
+    get_time: float | None = None,
+) -> MagicMock:
+    """Create a mock Task object for column testing."""
+    task = MagicMock()
+    task.fields = {
+        "status": status,
+        "is_last": is_last,
+        "logs": logs or [],
+        "label": label,
+        "step_description": step_description,
+    }
+    task.id = TaskID(1)
+    task.description = label
+    task.finished = False
+    task.finished_time = None
+    task.elapsed = None
+    task.get_time.return_value = (
+        get_time if get_time is not None else time_mod.monotonic()
+    )
+    return task
 
 
 # ---------------------------------------------------------------------------
@@ -145,3 +179,65 @@ def test_time_column_custom_style() -> None:
     assert "-:--:--" in output
     time_col = StepperTimeColumn(theme)
     assert time_col._theme.time_style == "bold magenta"
+
+
+# ---------------------------------------------------------------------------
+# Spinner support tests
+# ---------------------------------------------------------------------------
+
+
+class TestSpinnerSupport:
+    def test_theme_has_spinner_defaults(self) -> None:
+        theme = StepperTheme()
+        assert theme.spinner_name == "dots"
+        assert theme.spinner_speed == 1.0
+
+    def test_theme_accepts_custom_spinner(self) -> None:
+        theme = StepperTheme(spinner_name="line", spinner_speed=2.0)
+        assert theme.spinner_name == "line"
+        assert theme.spinner_speed == 2.0
+
+    def test_indicator_column_has_max_refresh(self) -> None:
+        theme = StepperTheme()
+        col = StepIndicatorColumn(theme, StatusMapper(theme), LogRenderer(theme))
+        assert col.max_refresh == 0.08
+
+    def test_active_step_renders_spinner(self) -> None:
+        from rich.spinner import Spinner
+
+        theme = StepperTheme(spinner_name="dots")
+        col = StepIndicatorColumn(theme, StatusMapper(theme), LogRenderer(theme))
+        task = _make_task(status=StepStatus.ACTIVE)
+        result = col.render(task)
+        assert isinstance(result, Group)
+        first_line = result.renderables[0]
+        assert isinstance(first_line, Text)
+        assert first_line.plain != "◉"
+
+    def test_completed_step_renders_static_symbol(self) -> None:
+        theme = StepperTheme(completed_symbol="✓")
+        col = StepIndicatorColumn(theme, StatusMapper(theme), LogRenderer(theme))
+        task = _make_task(status=StepStatus.COMPLETED)
+        result = col.render(task)
+        first_line = result.renderables[0]
+        assert isinstance(first_line, Text)
+        assert first_line.plain == "✓"
+
+    def test_pending_step_renders_static_symbol(self) -> None:
+        theme = StepperTheme(pending_symbol="○")
+        col = StepIndicatorColumn(theme, StatusMapper(theme), LogRenderer(theme))
+        task = _make_task(status=StepStatus.PENDING)
+        result = col.render(task)
+        first_line = result.renderables[0]
+        assert isinstance(first_line, Text)
+        assert first_line.plain == "○"
+
+    def test_spinner_uses_theme_speed(self) -> None:
+        theme = StepperTheme(spinner_name="dots", spinner_speed=3.0)
+        col = StepIndicatorColumn(theme, StatusMapper(theme), LogRenderer(theme))
+        assert col._spinner.speed == 3.0
+
+    def test_spinner_uses_theme_style(self) -> None:
+        theme = StepperTheme(active_style="magenta bold")
+        col = StepIndicatorColumn(theme, StatusMapper(theme), LogRenderer(theme))
+        assert str(col._spinner.style) == "magenta bold"

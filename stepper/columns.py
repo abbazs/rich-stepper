@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from rich.console import Group, RenderableType
 from rich.progress import ProgressColumn, Task
+from rich.spinner import Spinner
 from rich.text import Text
 
 from stepper.theme import StepperTheme
@@ -57,6 +58,8 @@ class LogRenderer:
 
 
 class StepIndicatorColumn(ProgressColumn):
+    max_refresh = 0.08
+
     def __init__(
         self, theme: StepperTheme, status: StatusMapper, log: LogRenderer
     ) -> None:
@@ -64,12 +67,20 @@ class StepIndicatorColumn(ProgressColumn):
         self._theme = theme
         self._status = status
         self._log = log
+        self._spinner = Spinner(
+            self._theme.spinner_name,
+            style=self._theme.active_style,
+            speed=self._theme.spinner_speed,
+        )
 
     def render(self, task: Task) -> RenderableType:
         status_val = task.fields.get("status", StepStatus.PENDING)
         is_last = task.fields.get("is_last", False)
-        symbol, style = self._status.symbol_and_style(status_val)
-        lines: list[RenderableType] = [Text(symbol, style=style)]
+        if status_val is StepStatus.ACTIVE:
+            lines: list[RenderableType] = [self._spinner.render(task.get_time())]
+        else:
+            symbol, style = self._status.symbol_and_style(status_val)
+            lines: list[RenderableType] = [Text(symbol, style=style)]
 
         if not is_last:
             connector = self._theme.connector_glyph()

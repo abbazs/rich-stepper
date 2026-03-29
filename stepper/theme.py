@@ -12,6 +12,8 @@ class StepperTheme:
     pending_symbol: str = "○"
     completed_style: str = "green"
     active_style: str = "cyan bold"
+    spinner_name: str = "dots"
+    spinner_speed: float = 1.0
     pending_style: str = "bright_black"
     connector_symbol: str = "│"
     connector_style: str = "bright_black"

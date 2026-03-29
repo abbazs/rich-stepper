@@ -176,7 +176,7 @@ def test_render_custom_theme_symbols() -> None:
     console.print(stepper)
     output = console.export_text()
     assert "[OK]" in output
-    assert "[>>]" in output
+    assert "[>>]" not in output
     assert "[--]" in output
 
 
