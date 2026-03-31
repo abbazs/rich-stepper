@@ -138,11 +138,7 @@ class StepLabelColumn(ProgressColumn):
             lines.extend(log_lines)
 
         if not is_last:
-            max_visible = task.fields.get("max_visible_logs")
-            log_count = self._log.visible_count(
-                len(task.fields.get("logs", [])), max_visible
-            )
-            connector_lines = 1 + max(0, self._theme.step_gap) + log_count
+            connector_lines = 1 + max(0, self._theme.step_gap)
             for _ in range(connector_lines):
                 lines.append(Text(""))
 
