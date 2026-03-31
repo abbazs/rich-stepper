@@ -89,6 +89,9 @@ class StepIndicatorColumn(ProgressColumn):
                 len(task.fields.get("logs", [])), max_visible
             )
             total_rows = 1 + max(0, self._theme.step_gap) + log_count
+            # Account for description in label column - description adds 1 extra line
+            if task.fields.get("step_description"):
+                total_rows += 1
             for _ in range(total_rows):
                 lines.append(Text(connector, style=self._theme.connector_style))
 
@@ -135,7 +138,11 @@ class StepLabelColumn(ProgressColumn):
             lines.extend(log_lines)
 
         if not is_last:
-            connector_lines = 1 + max(0, self._theme.step_gap)
+            max_visible = task.fields.get("max_visible_logs")
+            log_count = self._log.visible_count(
+                len(task.fields.get("logs", [])), max_visible
+            )
+            connector_lines = 1 + max(0, self._theme.step_gap) + log_count
             for _ in range(connector_lines):
                 lines.append(Text(""))
 
