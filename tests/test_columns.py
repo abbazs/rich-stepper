@@ -304,3 +304,56 @@ def test_indicator_above_connector_count_excludes_log_rows() -> None:
     # ABOVE + 2 logs → 1 connector (label row only); BELOW would give 3
     connector_count = output.count("│")
     assert connector_count == 1
+
+
+def test_indicator_column_counts_child_rows_in_connector() -> None:
+    """Indicator column emits one extra connector row per child step."""
+    from stepper.node import StepNode
+
+    theme = StepperTheme()
+    col = StepIndicatorColumn(theme, StatusMapper(theme), LogRenderer(theme))
+    child1 = StepNode(0, "C1", StepStatus.COMPLETED, None, [], [], False, 1, None)
+    child2 = StepNode(1, "C2", StepStatus.PENDING, None, [], [], False, 1, None)
+    task = _make_task(status=StepStatus.PENDING, is_last=False)
+    task.fields["children"] = [child1, child2]
+    result = col.render(task)
+    renderables = result.renderables
+    # symbol + (1 label + 2 children + 1 blank) = symbol + 4 connectors
+    assert len(renderables) == 5
+
+
+def test_label_column_renders_tree_branches_for_children() -> None:
+    """Label column renders ├─ for intermediate children and └─ for the last."""
+    from stepper.node import StepNode
+
+    theme = StepperTheme()
+    col = StepLabelColumn(theme, StatusMapper(theme), LogRenderer(theme))
+    child1 = StepNode(10, "Unit Tests", StepStatus.COMPLETED, None, [], [], False, 0, None)
+    child2 = StepNode(11, "E2E Tests", StepStatus.FAILED, None, [], [], False, 0, None)
+    task = _make_task(label="Test Suite", is_last=False)
+    task.fields["children"] = [child1, child2]
+    task.fields["is_parallel_group"] = True
+    result = col.render(task)
+    rendered_text = "".join(
+        r.plain for r in result.renderables if hasattr(r, "plain")
+    )
+    assert "├─" in rendered_text
+    assert "└─" in rendered_text
+    assert "Unit Tests" in rendered_text
+    assert "E2E Tests" in rendered_text
+
+
+def test_label_column_renders_parallel_badge() -> None:
+    """Parallel group header label includes a 'parallel' badge."""
+    from stepper.node import StepNode
+
+    theme = StepperTheme()
+    col = StepLabelColumn(theme, StatusMapper(theme), LogRenderer(theme))
+    task = _make_task(label="Run Tests", is_last=True)
+    task.fields["children"] = []
+    task.fields["is_parallel_group"] = True
+    result = col.render(task)
+    rendered_text = "".join(
+        r.plain for r in result.renderables if hasattr(r, "plain")
+    )
+    assert "parallel" in rendered_text
