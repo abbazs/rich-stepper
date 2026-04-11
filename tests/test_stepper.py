@@ -355,3 +355,12 @@ def test_stepper_with_all_features() -> None:
     assert "running tests..." in output
     # Completed step shows time, pending shows dash
     assert "-:--:--" in output
+
+
+def test_rich_console_renders_stepper() -> None:
+    """Console().print(stepper) must work without entering the context manager."""
+    stepper = Stepper(console=Console(record=True, width=80, legacy_windows=False), auto_refresh=False)
+    stepper.add_step("Alpha", status=StepStatus.COMPLETED)
+    outer = Console(record=True, width=80, legacy_windows=False)
+    outer.print(stepper)
+    assert "Alpha" in outer.export_text()
