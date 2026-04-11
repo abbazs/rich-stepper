@@ -259,6 +259,36 @@ class Stepper:
         self._progress.update(parent.task_id, children=parent.children, refresh=True)
         return child_idx
 
+    def add_sub_step(
+        self,
+        parent_index: int,
+        label: str,
+        status: StepStatus = StepStatus.PENDING,
+        step_description: str | None = None,
+    ) -> int:
+        """Add a sequential sub-step under a regular step and return its global index.
+
+        Raises:
+            TypeError: If ``parent_index`` refers to a parallel group.
+            IndexError: If ``parent_index`` is out of range.
+        """
+        parent = self._get_node(parent_index)
+        if parent.is_parallel:
+            raise TypeError(
+                f"index {parent_index} is a parallel group; "
+                "use add_parallel_step to add children to a parallel group"
+            )
+        child_idx, child_node = self._alloc_node(
+            label,
+            status,
+            step_description,
+            parent_idx=parent_index,
+        )
+        parent.children.append(child_node)
+        assert parent.task_id is not None
+        self._progress.update(parent.task_id, children=parent.children, refresh=True)
+        return child_idx
+
     def set_step_status(self, index: int, status: StepStatus) -> None:
         """Update the status of any step by global index."""
         node = self._get_node(index)

@@ -430,3 +430,70 @@ def test_set_step_status_on_parallel_child() -> None:
     stepper.set_step_status(child_idx, StepStatus.COMPLETED)
     node = stepper._node_index[child_idx]
     assert node.status is StepStatus.COMPLETED
+
+
+# ---------------------------------------------------------------------------
+# Task 6: Sub-step API
+# ---------------------------------------------------------------------------
+
+
+def test_add_sub_step_returns_child_index() -> None:
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    parent_idx = stepper.add_step("Process")
+    sub_idx = stepper.add_sub_step(parent_idx, "Validate")
+    assert isinstance(sub_idx, int)
+    assert sub_idx != parent_idx
+
+
+def test_add_sub_step_on_parallel_group_raises() -> None:
+    """add_sub_step raises TypeError when target is a parallel group."""
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    g = stepper.add_parallel_group("Tests")
+    with pytest.raises(TypeError):
+        stepper.add_sub_step(g, "Sub")
+
+
+def test_add_sub_step_on_step_with_parallel_children_raises() -> None:
+    """Multiple sub-steps under a regular step are fine (not parallel children)."""
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    parent_idx = stepper.add_step("Deploy")
+    stepper.add_sub_step(parent_idx, "Stage")
+    stepper.add_sub_step(parent_idx, "Prod")   # also OK
+
+
+def test_sub_step_renders_in_output() -> None:
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    parent_idx = stepper.add_step("Process Data")
+    stepper.add_sub_step(parent_idx, "Validate schema", status=StepStatus.COMPLETED)
+    stepper.add_sub_step(parent_idx, "Write to DB", status=StepStatus.ACTIVE)
+    console.print(stepper)
+    output = console.export_text()
+    assert "Process Data" in output
+    assert "Validate schema" in output
+    assert "Write to DB" in output
+    assert "├─" in output
+    assert "└─" in output
+
+
+def test_set_step_status_on_sub_step() -> None:
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    parent_idx = stepper.add_step("Build")
+    sub_idx = stepper.add_sub_step(parent_idx, "Compile", status=StepStatus.PENDING)
+    stepper.set_step_status(sub_idx, StepStatus.COMPLETED)
+    node = stepper._node_index[sub_idx]
+    assert node.status is StepStatus.COMPLETED
+
+
+def test_log_on_sub_step() -> None:
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    parent_idx = stepper.add_step("Build")
+    sub_idx = stepper.add_sub_step(parent_idx, "Compile")
+    stepper.log(sub_idx, "compiled 42 files")
+    node = stepper._node_index[sub_idx]
+    assert "compiled 42 files" in node.logs
