@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import types
 from collections.abc import Callable
 
 from rich.console import Console
@@ -182,6 +183,11 @@ class Stepper:
     def add_steps(self, steps: list[StepDefinition]) -> None:
         """Add multiple steps from a StepDefinition list."""
         for step in steps:
+            if step.parallel or step.sub_steps:
+                raise NotImplementedError(
+                    "parallel groups and sub-steps are not yet supported in add_steps; "
+                    "use add_parallel_group / add_parallel_step / add_sub_step instead"
+                )
             self.add_step(
                 step.label,
                 status=step.status,
@@ -247,8 +253,13 @@ class Stepper:
         self._progress.__enter__()
         return self
 
-    def __exit__(self, *args: object) -> None:
-        self._progress.__exit__(*args)
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: types.TracebackType | None,
+    ) -> None:
+        self._progress.__exit__(exc_type, exc_val, exc_tb)
 
     def __rich_console__(self, console: Console, options: object) -> object:
         """Yield the internal Progress so Console().print(stepper) renders correctly."""
