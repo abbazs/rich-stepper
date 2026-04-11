@@ -497,3 +497,62 @@ def test_log_on_sub_step() -> None:
     stepper.log(sub_idx, "compiled 42 files")
     node = stepper._node_index[sub_idx]
     assert "compiled 42 files" in node.logs
+
+
+# ---------------------------------------------------------------------------
+# Task 7: Parallel Group Status Auto-Derive
+# ---------------------------------------------------------------------------
+
+
+def test_parallel_group_derives_active_when_any_child_active() -> None:
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    g = stepper.add_parallel_group("Tests")
+    c1 = stepper.add_parallel_step(g, "A", status=StepStatus.COMPLETED)
+    c2 = stepper.add_parallel_step(g, "B", status=StepStatus.PENDING)
+    stepper.set_step_status(c2, StepStatus.ACTIVE)
+    group_node = stepper._node_index[g]
+    assert group_node.status is StepStatus.ACTIVE
+
+
+def test_parallel_group_derives_failed_when_child_fails_and_none_active() -> None:
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    g = stepper.add_parallel_group("Tests")
+    c1 = stepper.add_parallel_step(g, "A", status=StepStatus.COMPLETED)
+    c2 = stepper.add_parallel_step(g, "B", status=StepStatus.ACTIVE)
+    stepper.set_step_status(c2, StepStatus.FAILED)
+    group_node = stepper._node_index[g]
+    assert group_node.status is StepStatus.FAILED
+
+
+def test_parallel_group_derives_warning_when_child_warns_no_failure() -> None:
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    g = stepper.add_parallel_group("Tests")
+    c1 = stepper.add_parallel_step(g, "A", status=StepStatus.COMPLETED)
+    c2 = stepper.add_parallel_step(g, "B", status=StepStatus.PENDING)
+    stepper.set_step_status(c2, StepStatus.WARNING)
+    group_node = stepper._node_index[g]
+    assert group_node.status is StepStatus.WARNING
+
+
+def test_parallel_group_derives_completed_when_all_done() -> None:
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    g = stepper.add_parallel_group("Tests")
+    c1 = stepper.add_parallel_step(g, "A", status=StepStatus.ACTIVE)
+    c2 = stepper.add_parallel_step(g, "B", status=StepStatus.ACTIVE)
+    stepper.set_step_status(c1, StepStatus.COMPLETED)
+    stepper.set_step_status(c2, StepStatus.SKIPPED)
+    group_node = stepper._node_index[g]
+    assert group_node.status is StepStatus.COMPLETED
+
+
+def test_set_step_status_on_parallel_group_header_raises() -> None:
+    """Direct status set on a parallel group header is forbidden."""
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    g = stepper.add_parallel_group("Tests")
+    with pytest.raises(ValueError):
+        stepper.set_step_status(g, StepStatus.COMPLETED)

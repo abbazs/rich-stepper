@@ -153,6 +153,22 @@ class Stepper:
             if node.task_id is not None:
                 self._progress.update(node.task_id, is_last=(i == n - 1))
 
+    @staticmethod
+    def _derive_parallel_status(children: list[StepNode]) -> StepStatus:
+        """Compute a parallel group's status from the current statuses of its children."""
+        if not children:
+            return StepStatus.PENDING
+        statuses = {c.status for c in children}
+        if StepStatus.ACTIVE in statuses:
+            return StepStatus.ACTIVE
+        if StepStatus.FAILED in statuses:
+            return StepStatus.FAILED
+        if StepStatus.WARNING in statuses:
+            return StepStatus.WARNING
+        if all(s in (StepStatus.COMPLETED, StepStatus.SKIPPED) for s in statuses):
+            return StepStatus.COMPLETED
+        return StepStatus.PENDING
+
     def _get_node(self, index: int) -> StepNode:
         """Look up a node by global index; supports negative indexing for top-level."""
         if index < 0:
@@ -290,22 +306,44 @@ class Stepper:
         return child_idx
 
     def set_step_status(self, index: int, status: StepStatus) -> None:
-        """Update the status of any step by global index."""
+        """Update the status of any step by global index.
+
+        Raises:
+            ValueError: If ``index`` refers to a parallel group header (its
+                status is derived automatically from its children).
+            IndexError: If ``index`` is out of range.
+        """
         node = self._get_node(index)
+
+        if node.is_parallel:
+            raise ValueError(
+                f"index {index} is a parallel group header; its status derives "
+                "automatically from its children — call set_step_status on a child"
+            )
+
         node.status = status
+
         if node.task_id is not None:
-            # Top-level node: update Rich task directly
+            # Top-level node: update Rich task directly.
             if status is StepStatus.COMPLETED:
                 task = self._progress._tasks[node.task_id]
                 self._progress.update(node.task_id, status=status, completed=task.total)
             else:
                 self._progress.update(node.task_id, status=status)
         else:
-            # Child node: status already mutated on StepNode; trigger parent refresh
+            # Child node: status already mutated on StepNode.
+            # If parent is a parallel group, re-derive its status.
             assert node.parent_idx is not None
             parent = self._node_index[node.parent_idx]
             assert parent.task_id is not None
-            self._progress.update(parent.task_id, refresh=True)
+            if parent.is_parallel:
+                derived = self._derive_parallel_status(parent.children)
+                parent.status = derived
+                self._progress.update(
+                    parent.task_id, status=derived, refresh=True
+                )
+            else:
+                self._progress.update(parent.task_id, refresh=True)
 
     def set_step_progress(self, step_index: int, percent: float) -> None:
         """Set the progress bar value for a top-level step (0.0–1.0, clamped).
