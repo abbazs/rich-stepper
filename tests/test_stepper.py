@@ -455,7 +455,7 @@ def test_add_sub_step_on_parallel_group_raises() -> None:
         stepper.add_sub_step(g, "Sub")
 
 
-def test_add_sub_step_on_step_with_parallel_children_raises() -> None:
+def test_multiple_sub_steps_under_regular_step_is_fine() -> None:
     """Multiple sub-steps under a regular step are fine (not parallel children)."""
     console = Console(record=True, width=80, legacy_windows=False)
     stepper = Stepper(console=console, auto_refresh=False)
@@ -556,3 +556,25 @@ def test_set_step_status_on_parallel_group_header_raises() -> None:
     g = stepper.add_parallel_group("Tests")
     with pytest.raises(ValueError):
         stepper.set_step_status(g, StepStatus.COMPLETED)
+
+
+def test_add_steps_parallel_dispatch() -> None:
+    """add_steps with parallel=True creates a group with children via add_parallel_step."""
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    stepper.add_steps([
+        StepDefinition(
+            label="Test Suite",
+            parallel=True,
+            sub_steps=[
+                StepDefinition("Unit Tests", status=StepStatus.COMPLETED),
+                StepDefinition("E2E Tests", status=StepStatus.ACTIVE),
+            ],
+        )
+    ])
+    console.print(stepper)
+    output = console.export_text()
+    assert "Test Suite" in output
+    assert "Unit Tests" in output
+    assert "E2E Tests" in output
+    assert "parallel" in output
