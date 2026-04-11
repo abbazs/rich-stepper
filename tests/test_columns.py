@@ -11,6 +11,7 @@ from rich.progress import TaskID
 from rich.text import Text
 
 from stepper import (
+    LogPosition,
     StepIndicatorColumn,
     StepLabelColumn,
     StepStatus,
@@ -241,3 +242,50 @@ class TestSpinnerSupport:
         theme = StepperTheme(active_style="magenta bold")
         col = StepIndicatorColumn(theme, StatusMapper(theme), LogRenderer(theme))
         assert str(col._spinner.style) == "magenta bold"
+
+
+# ---------------------------------------------------------------------------
+# LOG_POSITION.ABOVE alignment tests
+# ---------------------------------------------------------------------------
+
+
+def test_indicator_above_prepends_blank_spacers() -> None:
+    """When log_position=ABOVE with n logs, indicator column must prepend n blank
+    spacers before the symbol so the symbol row aligns with the label row in
+    StepLabelColumn, which renders logs first."""
+    theme = StepperTheme(log_position=LogPosition.ABOVE, max_log_rows=2)
+    col = StepIndicatorColumn(theme, StatusMapper(theme), LogRenderer(theme))
+    task = _make_task(status=StepStatus.PENDING, is_last=False, logs=["a", "b"])
+    result = col.render(task)
+    assert isinstance(result, Group)
+    renderables = result.renderables
+    # 2 blank spacers + symbol + 1 connector (label row only) = 4
+    assert len(renderables) == 4
+    # Rows 0-1: blank spacers (one per log line above the label)
+    assert isinstance(renderables[0], Text) and renderables[0].plain == ""
+    assert isinstance(renderables[1], Text) and renderables[1].plain == ""
+    # Row 2: pending symbol
+    assert isinstance(renderables[2], Text) and renderables[2].plain == "○"
+    # Row 3: connector spans only the label row, not the log rows
+    assert isinstance(renderables[3], Text) and "│" in renderables[3].plain
+
+
+def test_indicator_above_connector_count_excludes_log_rows() -> None:
+    """With log_position=ABOVE and 2 logs, only 1 connector renders below the symbol
+    (for the label row), not 3 (which would wrongly include the 2 log rows)."""
+    from rich.console import Console
+
+    from stepper import StepDefinition
+
+    console = Console(record=True, width=80, legacy_windows=False)
+    theme = StepperTheme(log_position=LogPosition.ABOVE, max_log_rows=2)
+    stepper = Stepper(console=console, auto_refresh=False, theme=theme)
+    stepper.add_step("First")
+    stepper.add_step("Second")
+    stepper.log(0, "line one")
+    stepper.log(0, "line two")
+    console.print(stepper)
+    output = console.export_text()
+    # ABOVE + 2 logs → 1 connector (label row only); BELOW would give 3
+    connector_count = output.count("│")
+    assert connector_count == 1

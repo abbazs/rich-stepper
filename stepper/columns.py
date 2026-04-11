@@ -76,23 +76,44 @@ class StepIndicatorColumn(ProgressColumn):
     def render(self, task: Task) -> RenderableType:
         status_val = task.fields.get("status", StepStatus.PENDING)
         is_last = task.fields.get("is_last", False)
+
+        # Compute log count upfront — needed for ABOVE positioning spacers.
+        max_visible = task.fields.get("max_visible_logs")
+        log_count = self._log.visible_count(
+            len(task.fields.get("logs", [])), max_visible
+        )
+        logs_above = (
+            self._theme.log_position is LogPosition.ABOVE and log_count > 0
+        )
+
+        lines: list[RenderableType] = []
+
+        # When logs render above the label in StepLabelColumn, prepend blank
+        # spacers so the indicator symbol aligns with the label row, not the
+        # first log row.
+        if logs_above:
+            for _ in range(log_count):
+                lines.append(Text(""))
+
         if status_val is StepStatus.ACTIVE:
-            lines: list[RenderableType] = [self._spinner.render(task.get_time())]
+            lines.append(self._spinner.render(task.get_time()))
         else:
             symbol, style = self._status.symbol_and_style(status_val)
-            lines: list[RenderableType] = [Text(symbol, style=style)]
+            lines.append(Text(symbol, style=style))
 
         if not is_last:
             connector = self._theme.connector_glyph()
-            max_visible = task.fields.get("max_visible_logs")
-            log_count = self._log.visible_count(
-                len(task.fields.get("logs", [])), max_visible
-            )
-            total_rows = 1 + max(0, self._theme.step_gap) + log_count
-            # Account for description in label column - description adds 1 extra line
+            # Connector rows span: 1 (label row) + step_gap + (1 if description).
+            # Log rows are already accounted for above the symbol (ABOVE) or are
+            # included here as rows below the label (BELOW/default).
+            connector_rows = 1 + max(0, self._theme.step_gap)
             if task.fields.get("step_description"):
-                total_rows += 1
-            for _ in range(total_rows):
+                connector_rows += 1
+            if not logs_above:
+                # BELOW or no logs: log rows appear after the label, so the
+                # connector must span them too.
+                connector_rows += log_count
+            for _ in range(connector_rows):
                 lines.append(Text(connector, style=self._theme.connector_style))
 
         return Group(*lines)
