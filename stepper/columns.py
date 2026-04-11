@@ -7,6 +7,7 @@ from rich.progress import ProgressColumn, Task
 from rich.spinner import Spinner
 from rich.text import Text
 
+from stepper.node import StepNode
 from stepper.theme import StepperTheme
 from stepper.types import LogPosition, StepStatus
 
@@ -22,6 +23,12 @@ class StatusMapper:
             return self._theme.completed_symbol, self._theme.completed_style
         if status is StepStatus.ACTIVE:
             return self._theme.active_symbol, self._theme.active_style
+        if status is StepStatus.FAILED:
+            return self._theme.failed_symbol, self._theme.failed_style
+        if status is StepStatus.WARNING:
+            return self._theme.warning_symbol, self._theme.warning_style
+        if status is StepStatus.SKIPPED:
+            return self._theme.skipped_symbol, self._theme.skipped_style
         return self._theme.pending_symbol, self._theme.pending_style
 
     def style(self, status: StepStatus) -> str:
@@ -76,23 +83,60 @@ class StepIndicatorColumn(ProgressColumn):
     def render(self, task: Task) -> RenderableType:
         status_val = task.fields.get("status", StepStatus.PENDING)
         is_last = task.fields.get("is_last", False)
+
+        # Compute parent log count and whether logs render above the label.
+        max_visible = task.fields.get("max_visible_logs")
+        log_count = self._log.visible_count(
+            len(task.fields.get("logs", [])), max_visible
+        )
+        logs_above = (
+            self._theme.log_position is LogPosition.ABOVE and log_count > 0
+        )
+
+        lines: list[RenderableType] = []
+
+        # When logs render above the label in StepLabelColumn, prepend blank
+        # spacers so the indicator symbol aligns with the label row.
+        if logs_above:
+            for _ in range(log_count):
+                lines.append(Text(""))
+
         if status_val is StepStatus.ACTIVE:
-            lines: list[RenderableType] = [self._spinner.render(task.get_time())]
+            lines.append(self._spinner.render(task.get_time()))
         else:
             symbol, style = self._status.symbol_and_style(status_val)
-            lines: list[RenderableType] = [Text(symbol, style=style)]
+            lines.append(Text(symbol, style=style))
 
         if not is_last:
             connector = self._theme.connector_glyph()
-            max_visible = task.fields.get("max_visible_logs")
-            log_count = self._log.visible_count(
-                len(task.fields.get("logs", [])), max_visible
+
+            # Count rows contributed by each embedded child (label + description + logs).
+            children: list[StepNode] = task.fields.get("children", [])
+            child_rows = sum(
+                1  # child label row
+                + (1 if child.description else 0)
+                + self._log.visible_count(len(child.logs), max_visible)
+                for child in children
             )
-            total_rows = 1 + max(0, self._theme.step_gap) + log_count
-            # Account for description in label column - description adds 1 extra line
-            if task.fields.get("step_description"):
-                total_rows += 1
-            for _ in range(total_rows):
+
+            # Connector rows after the symbol:
+            #   1 (parent label row) + description + child_rows
+            #   + 1 (child group separator, only when children exist) + step_gap
+            #   ABOVE: parent log rows already prepended as spacers, not counted here
+            #   BELOW: parent log rows appear after the label, so connectors span them
+            connector_rows = (
+                1
+                + (1 if task.fields.get("step_description") else 0)
+                + child_rows
+                + (1 if children else 0)
+                + max(0, self._theme.step_gap)
+            )
+            if not logs_above:
+                # BELOW: parent log rows appear after the label, so the
+                # connector must span them too.
+                connector_rows += log_count
+
+            for _ in range(connector_rows):
                 lines.append(Text(connector, style=self._theme.connector_style))
 
         return Group(*lines)
@@ -112,6 +156,7 @@ class StepLabelColumn(ProgressColumn):
         is_last = task.fields.get("is_last", False)
         description = task.fields.get("step_description")
         label = task.fields.get("label", "")
+        is_parallel_group = task.fields.get("is_parallel_group", False)
 
         label_style = self._merge_styles(
             self._status.style(status_val), self._theme.label_style
@@ -125,7 +170,14 @@ class StepLabelColumn(ProgressColumn):
         if self._theme.log_position is LogPosition.ABOVE:
             lines.extend(log_lines)
 
-        lines.append(Text(f"{padding}{label}", style=label_style))
+        # Parent label — append 'parallel' badge for group headers.
+        if is_parallel_group:
+            label_text = Text()
+            label_text.append(f"{padding}{label}", style=label_style)
+            label_text.append("  parallel", style="bright_black")
+            lines.append(label_text)
+        else:
+            lines.append(Text(f"{padding}{label}", style=label_style))
 
         if description:
             lines.append(
@@ -137,8 +189,39 @@ class StepLabelColumn(ProgressColumn):
         if self._theme.log_position is LogPosition.BELOW:
             lines.extend(log_lines)
 
+        # Render embedded children (sub-steps or parallel children) with tree branches.
+        children: list = task.fields.get("children", [])
+        for i, child in enumerate(children):
+            is_last_child = (i == len(children) - 1)
+            branch = (
+                self._theme.tree_branch_last
+                if is_last_child
+                else self._theme.tree_branch_mid
+            )
+            child_symbol, child_style = self._status.symbol_and_style(child.status)
+            lines.append(
+                Text(
+                    f"{padding}{branch} {child_symbol}  {child.label}",
+                    style=child_style,
+                )
+            )
+            if child.description:
+                lines.append(
+                    Text(
+                        f"{padding}    {child.description}",
+                        style=self._theme.step_description_style,
+                    )
+                )
+            # Child logs always render below the child's label row.
+            child_log_lines = self._log.build_lines(child.logs, max_visible)
+            lines.extend(child_log_lines)
+
         if not is_last:
-            connector_lines = 1 + max(0, self._theme.step_gap)
+            # Add a trailing blank separator between steps. When children are
+            # present, an extra blank is added so the indicator connector height
+            # matches the label column row count (children each add a connector
+            # row and the group needs one additional separator blank).
+            connector_lines = 1 + (1 if children else 0) + max(0, self._theme.step_gap)
             for _ in range(connector_lines):
                 lines.append(Text(""))
 

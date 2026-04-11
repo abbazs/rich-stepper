@@ -138,7 +138,8 @@ def test_step_definition_frozen() -> None:
 
 
 def test_step_status_values() -> None:
-    assert len(list(StepStatus)) == 3
+    # COMPLETED, ACTIVE, PENDING + FAILED, WARNING, SKIPPED
+    assert len(list(StepStatus)) == 6
 
 
 def test_step_status_value_strings() -> None:
@@ -150,3 +151,29 @@ def test_step_status_value_strings() -> None:
 def test_log_position_enum_values() -> None:
     assert LogPosition.BELOW.value == "below"
     assert LogPosition.ABOVE.value == "above"
+
+
+def test_step_status_has_failed_warning_skipped() -> None:
+    assert StepStatus.FAILED.value == "failed"
+    assert StepStatus.WARNING.value == "warning"
+    assert StepStatus.SKIPPED.value == "skipped"
+
+
+def test_theme_new_status_symbol_defaults() -> None:
+    theme = StepperTheme()
+    assert theme.failed_symbol == "✕"
+    assert theme.warning_symbol == "⚠"
+    assert theme.skipped_symbol == "⊘"
+
+
+def test_theme_new_status_style_defaults() -> None:
+    theme = StepperTheme()
+    assert theme.failed_style == "red bold"
+    assert theme.warning_style == "yellow bold"
+    assert theme.skipped_style == "bright_black"
+
+
+def test_theme_tree_branch_defaults() -> None:
+    theme = StepperTheme()
+    assert theme.tree_branch_mid == "├─"
+    assert theme.tree_branch_last == "└─"

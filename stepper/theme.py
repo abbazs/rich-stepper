@@ -33,6 +33,14 @@ class StepperTheme:
     max_log_rows: int | None = None
     log_style: str = "dim italic"
     log_prefix: str = "›"
+    failed_symbol: str = "✕"
+    warning_symbol: str = "⚠"
+    skipped_symbol: str = "⊘"
+    failed_style: str = "red bold"
+    warning_style: str = "yellow bold"
+    skipped_style: str = "bright_black"
+    tree_branch_mid: str = "├─"
+    tree_branch_last: str = "└─"
 
     def connector_glyph(self) -> str:
         thickness = max(1, self.line_thickness)

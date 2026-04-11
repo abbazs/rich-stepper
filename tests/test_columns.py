@@ -11,13 +11,18 @@ from rich.progress import TaskID
 from rich.text import Text
 
 from stepper import (
-    StepIndicatorColumn,
-    StepLabelColumn,
+    LogPosition,
     StepStatus,
     Stepper,
     StepperTheme,
 )
-from stepper.columns import LogRenderer, StatusMapper, StepperTimeColumn
+from stepper.columns import (
+    LogRenderer,
+    StatusMapper,
+    StepIndicatorColumn,
+    StepLabelColumn,
+    StepperTimeColumn,
+)
 
 
 def _make_task(
@@ -241,3 +246,118 @@ class TestSpinnerSupport:
         theme = StepperTheme(active_style="magenta bold")
         col = StepIndicatorColumn(theme, StatusMapper(theme), LogRenderer(theme))
         assert str(col._spinner.style) == "magenta bold"
+
+
+def test_status_mapper_failed_warning_skipped() -> None:
+    theme = StepperTheme(
+        failed_symbol="✕",
+        failed_style="red bold",
+        warning_symbol="⚠",
+        warning_style="yellow bold",
+        skipped_symbol="⊘",
+        skipped_style="bright_black",
+    )
+    mapper = StatusMapper(theme)
+    assert mapper.symbol_and_style(StepStatus.FAILED) == ("✕", "red bold")
+    assert mapper.symbol_and_style(StepStatus.WARNING) == ("⚠", "yellow bold")
+    assert mapper.symbol_and_style(StepStatus.SKIPPED) == ("⊘", "bright_black")
+
+
+# ---------------------------------------------------------------------------
+# LOG_POSITION.ABOVE alignment tests
+# ---------------------------------------------------------------------------
+
+
+def test_indicator_above_prepends_blank_spacers() -> None:
+    """When log_position=ABOVE with n logs, indicator column must prepend n blank
+    spacers before the symbol so the symbol row aligns with the label row in
+    StepLabelColumn, which renders logs first."""
+    theme = StepperTheme(log_position=LogPosition.ABOVE, max_log_rows=2)
+    col = StepIndicatorColumn(theme, StatusMapper(theme), LogRenderer(theme))
+    task = _make_task(status=StepStatus.PENDING, is_last=False, logs=["a", "b"])
+    result = col.render(task)
+    assert isinstance(result, Group)
+    renderables = result.renderables
+    # 2 blank spacers + symbol + 1 connector (label row only) = 4
+    assert len(renderables) == 4
+    # Rows 0-1: blank spacers (one per log line above the label)
+    assert isinstance(renderables[0], Text) and renderables[0].plain == ""
+    assert isinstance(renderables[1], Text) and renderables[1].plain == ""
+    # Row 2: pending symbol
+    assert isinstance(renderables[2], Text) and renderables[2].plain == "○"
+    # Row 3: connector spans only the label row, not the log rows
+    assert isinstance(renderables[3], Text) and "│" in renderables[3].plain
+
+
+def test_indicator_above_connector_count_excludes_log_rows() -> None:
+    """With log_position=ABOVE and 2 logs, only 1 connector renders below the symbol
+    (for the label row), not 3 (which would wrongly include the 2 log rows)."""
+    from rich.console import Console
+
+    from stepper import StepDefinition
+
+    console = Console(record=True, width=80, legacy_windows=False)
+    theme = StepperTheme(log_position=LogPosition.ABOVE, max_log_rows=2)
+    stepper = Stepper(console=console, auto_refresh=False, theme=theme)
+    stepper.add_step("First")
+    stepper.add_step("Second")
+    stepper.log(0, "line one")
+    stepper.log(0, "line two")
+    console.print(stepper)
+    output = console.export_text()
+    # ABOVE + 2 logs → 1 connector (label row only); BELOW would give 3
+    connector_count = output.count("│")
+    assert connector_count == 1
+
+
+def test_indicator_column_counts_child_rows_in_connector() -> None:
+    """Indicator column emits one extra connector row per child step."""
+    from stepper.node import StepNode
+
+    theme = StepperTheme()
+    col = StepIndicatorColumn(theme, StatusMapper(theme), LogRenderer(theme))
+    child1 = StepNode(0, "C1", StepStatus.COMPLETED, None, [], [], False, 1, None)
+    child2 = StepNode(1, "C2", StepStatus.PENDING, None, [], [], False, 1, None)
+    task = _make_task(status=StepStatus.PENDING, is_last=False)
+    task.fields["children"] = [child1, child2]
+    result = col.render(task)
+    renderables = result.renderables
+    # symbol + (1 label + 2 children + 1 blank) = symbol + 4 connectors
+    assert len(renderables) == 5
+
+
+def test_label_column_renders_tree_branches_for_children() -> None:
+    """Label column renders ├─ for intermediate children and └─ for the last."""
+    from stepper.node import StepNode
+
+    theme = StepperTheme()
+    col = StepLabelColumn(theme, StatusMapper(theme), LogRenderer(theme))
+    child1 = StepNode(10, "Unit Tests", StepStatus.COMPLETED, None, [], [], False, 0, None)
+    child2 = StepNode(11, "E2E Tests", StepStatus.FAILED, None, [], [], False, 0, None)
+    task = _make_task(label="Test Suite", is_last=False)
+    task.fields["children"] = [child1, child2]
+    task.fields["is_parallel_group"] = True
+    result = col.render(task)
+    rendered_text = "".join(
+        r.plain for r in result.renderables if hasattr(r, "plain")
+    )
+    assert "├─" in rendered_text
+    assert "└─" in rendered_text
+    assert "Unit Tests" in rendered_text
+    assert "E2E Tests" in rendered_text
+
+
+def test_label_column_renders_parallel_badge() -> None:
+    """Parallel group header label includes a 'parallel' badge."""
+    from stepper.node import StepNode
+
+    theme = StepperTheme()
+    col = StepLabelColumn(theme, StatusMapper(theme), LogRenderer(theme))
+    task = _make_task(label="Run Tests", is_last=True)
+    task.fields["children"] = []
+    task.fields["is_parallel_group"] = True
+    result = col.render(task)
+    rendered_text = "".join(
+        r.plain for r in result.renderables if hasattr(r, "plain")
+    )
+    assert "parallel" in rendered_text

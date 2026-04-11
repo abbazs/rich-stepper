@@ -355,3 +355,226 @@ def test_stepper_with_all_features() -> None:
     assert "running tests..." in output
     # Completed step shows time, pending shows dash
     assert "-:--:--" in output
+
+
+def test_rich_console_renders_stepper() -> None:
+    """Console().print(stepper) must work without entering the context manager."""
+    stepper = Stepper(console=Console(record=True, width=80, legacy_windows=False), auto_refresh=False)
+    stepper.add_step("Alpha", status=StepStatus.COMPLETED)
+    outer = Console(record=True, width=80, legacy_windows=False)
+    outer.print(stepper)
+    assert "Alpha" in outer.export_text()
+
+
+# ---------------------------------------------------------------------------
+# Task 5: Parallel Group API
+# ---------------------------------------------------------------------------
+
+
+def test_add_parallel_group_returns_index() -> None:
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    idx = stepper.add_parallel_group("Tests")
+    assert isinstance(idx, int)
+
+
+def test_add_parallel_step_returns_child_index() -> None:
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    group_idx = stepper.add_parallel_group("Tests")
+    child_idx = stepper.add_parallel_step(group_idx, "Unit Tests")
+    assert isinstance(child_idx, int)
+    assert child_idx != group_idx
+
+
+def test_add_parallel_step_wrong_target_raises() -> None:
+    """add_parallel_step raises TypeError when target is not a parallel group."""
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    step_idx = stepper.add_step("Regular")
+    with pytest.raises(TypeError):
+        stepper.add_parallel_step(step_idx, "Child")
+
+
+def test_parallel_group_renders_children() -> None:
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    g = stepper.add_parallel_group("Test Suite")
+    stepper.add_parallel_step(g, "Unit Tests", status=StepStatus.COMPLETED)
+    stepper.add_parallel_step(g, "E2E Tests", status=StepStatus.FAILED)
+    console.print(stepper)
+    output = console.export_text()
+    assert "Test Suite" in output
+    assert "Unit Tests" in output
+    assert "E2E Tests" in output
+    assert "├─" in output
+    assert "└─" in output
+
+
+def test_parallel_group_renders_parallel_badge() -> None:
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    g = stepper.add_parallel_group("Run Tests")
+    stepper.add_parallel_step(g, "A")
+    console.print(stepper)
+    output = console.export_text()
+    assert "parallel" in output
+
+
+def test_set_step_status_on_parallel_child() -> None:
+    """set_step_status works on a parallel child via its global index."""
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    g = stepper.add_parallel_group("Tests")
+    child_idx = stepper.add_parallel_step(g, "Unit", status=StepStatus.PENDING)
+    stepper.set_step_status(child_idx, StepStatus.COMPLETED)
+    node = stepper._node_index[child_idx]
+    assert node.status is StepStatus.COMPLETED
+
+
+# ---------------------------------------------------------------------------
+# Task 6: Sub-step API
+# ---------------------------------------------------------------------------
+
+
+def test_add_sub_step_returns_child_index() -> None:
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    parent_idx = stepper.add_step("Process")
+    sub_idx = stepper.add_sub_step(parent_idx, "Validate")
+    assert isinstance(sub_idx, int)
+    assert sub_idx != parent_idx
+
+
+def test_add_sub_step_on_parallel_group_raises() -> None:
+    """add_sub_step raises TypeError when target is a parallel group."""
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    g = stepper.add_parallel_group("Tests")
+    with pytest.raises(TypeError):
+        stepper.add_sub_step(g, "Sub")
+
+
+def test_multiple_sub_steps_under_regular_step_is_fine() -> None:
+    """Multiple sub-steps under a regular step are fine (not parallel children)."""
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    parent_idx = stepper.add_step("Deploy")
+    stepper.add_sub_step(parent_idx, "Stage")
+    stepper.add_sub_step(parent_idx, "Prod")   # also OK
+
+
+def test_sub_step_renders_in_output() -> None:
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    parent_idx = stepper.add_step("Process Data")
+    stepper.add_sub_step(parent_idx, "Validate schema", status=StepStatus.COMPLETED)
+    stepper.add_sub_step(parent_idx, "Write to DB", status=StepStatus.ACTIVE)
+    console.print(stepper)
+    output = console.export_text()
+    assert "Process Data" in output
+    assert "Validate schema" in output
+    assert "Write to DB" in output
+    assert "├─" in output
+    assert "└─" in output
+
+
+def test_set_step_status_on_sub_step() -> None:
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    parent_idx = stepper.add_step("Build")
+    sub_idx = stepper.add_sub_step(parent_idx, "Compile", status=StepStatus.PENDING)
+    stepper.set_step_status(sub_idx, StepStatus.COMPLETED)
+    node = stepper._node_index[sub_idx]
+    assert node.status is StepStatus.COMPLETED
+
+
+def test_log_on_sub_step() -> None:
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    parent_idx = stepper.add_step("Build")
+    sub_idx = stepper.add_sub_step(parent_idx, "Compile")
+    stepper.log(sub_idx, "compiled 42 files")
+    node = stepper._node_index[sub_idx]
+    assert "compiled 42 files" in node.logs
+
+
+# ---------------------------------------------------------------------------
+# Task 7: Parallel Group Status Auto-Derive
+# ---------------------------------------------------------------------------
+
+
+def test_parallel_group_derives_active_when_any_child_active() -> None:
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    g = stepper.add_parallel_group("Tests")
+    c1 = stepper.add_parallel_step(g, "A", status=StepStatus.COMPLETED)
+    c2 = stepper.add_parallel_step(g, "B", status=StepStatus.PENDING)
+    stepper.set_step_status(c2, StepStatus.ACTIVE)
+    group_node = stepper._node_index[g]
+    assert group_node.status is StepStatus.ACTIVE
+
+
+def test_parallel_group_derives_failed_when_child_fails_and_none_active() -> None:
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    g = stepper.add_parallel_group("Tests")
+    c1 = stepper.add_parallel_step(g, "A", status=StepStatus.COMPLETED)
+    c2 = stepper.add_parallel_step(g, "B", status=StepStatus.ACTIVE)
+    stepper.set_step_status(c2, StepStatus.FAILED)
+    group_node = stepper._node_index[g]
+    assert group_node.status is StepStatus.FAILED
+
+
+def test_parallel_group_derives_warning_when_child_warns_no_failure() -> None:
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    g = stepper.add_parallel_group("Tests")
+    c1 = stepper.add_parallel_step(g, "A", status=StepStatus.COMPLETED)
+    c2 = stepper.add_parallel_step(g, "B", status=StepStatus.PENDING)
+    stepper.set_step_status(c2, StepStatus.WARNING)
+    group_node = stepper._node_index[g]
+    assert group_node.status is StepStatus.WARNING
+
+
+def test_parallel_group_derives_completed_when_all_done() -> None:
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    g = stepper.add_parallel_group("Tests")
+    c1 = stepper.add_parallel_step(g, "A", status=StepStatus.ACTIVE)
+    c2 = stepper.add_parallel_step(g, "B", status=StepStatus.ACTIVE)
+    stepper.set_step_status(c1, StepStatus.COMPLETED)
+    stepper.set_step_status(c2, StepStatus.SKIPPED)
+    group_node = stepper._node_index[g]
+    assert group_node.status is StepStatus.COMPLETED
+
+
+def test_set_step_status_on_parallel_group_header_raises() -> None:
+    """Direct status set on a parallel group header is forbidden."""
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    g = stepper.add_parallel_group("Tests")
+    with pytest.raises(ValueError):
+        stepper.set_step_status(g, StepStatus.COMPLETED)
+
+
+def test_add_steps_parallel_dispatch() -> None:
+    """add_steps with parallel=True creates a group with children via add_parallel_step."""
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    stepper.add_steps([
+        StepDefinition(
+            label="Test Suite",
+            parallel=True,
+            sub_steps=[
+                StepDefinition("Unit Tests", status=StepStatus.COMPLETED),
+                StepDefinition("E2E Tests", status=StepStatus.ACTIVE),
+            ],
+        )
+    ])
+    console.print(stepper)
+    output = console.export_text()
+    assert "Test Suite" in output
+    assert "Unit Tests" in output
+    assert "E2E Tests" in output
+    assert "parallel" in output
