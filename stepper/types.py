@@ -8,6 +8,9 @@ class StepStatus(Enum):
     COMPLETED = "completed"
     ACTIVE = "active"
     PENDING = "pending"
+    FAILED = "failed"
+    WARNING = "warning"
+    SKIPPED = "skipped"
 
 
 class LogPosition(Enum):

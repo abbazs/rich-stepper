@@ -22,6 +22,12 @@ class StatusMapper:
             return self._theme.completed_symbol, self._theme.completed_style
         if status is StepStatus.ACTIVE:
             return self._theme.active_symbol, self._theme.active_style
+        if status is StepStatus.FAILED:
+            return self._theme.failed_symbol, self._theme.failed_style
+        if status is StepStatus.WARNING:
+            return self._theme.warning_symbol, self._theme.warning_style
+        if status is StepStatus.SKIPPED:
+            return self._theme.skipped_symbol, self._theme.skipped_style
         return self._theme.pending_symbol, self._theme.pending_style
 
     def style(self, status: StepStatus) -> str:

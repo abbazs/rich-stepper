@@ -244,6 +244,21 @@ class TestSpinnerSupport:
         assert str(col._spinner.style) == "magenta bold"
 
 
+def test_status_mapper_failed_warning_skipped() -> None:
+    theme = StepperTheme(
+        failed_symbol="✕",
+        failed_style="red bold",
+        warning_symbol="⚠",
+        warning_style="yellow bold",
+        skipped_symbol="⊘",
+        skipped_style="bright_black",
+    )
+    mapper = StatusMapper(theme)
+    assert mapper.symbol_and_style(StepStatus.FAILED) == ("✕", "red bold")
+    assert mapper.symbol_and_style(StepStatus.WARNING) == ("⚠", "yellow bold")
+    assert mapper.symbol_and_style(StepStatus.SKIPPED) == ("⊘", "bright_black")
+
+
 # ---------------------------------------------------------------------------
 # LOG_POSITION.ABOVE alignment tests
 # ---------------------------------------------------------------------------
