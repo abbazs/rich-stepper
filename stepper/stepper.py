@@ -181,18 +181,83 @@ class Stepper:
         return idx
 
     def add_steps(self, steps: list[StepDefinition]) -> None:
-        """Add multiple steps from a StepDefinition list."""
+        """Add multiple steps from a StepDefinition list.
+
+        Handles ``parallel=True`` (creates a parallel group header) and
+        ``sub_steps`` (adds sequential children under the step).
+        """
         for step in steps:
-            if step.parallel or step.sub_steps:
-                raise NotImplementedError(
-                    "parallel groups and sub-steps are not yet supported in add_steps; "
-                    "use add_parallel_group / add_parallel_step / add_sub_step instead"
+            if step.parallel:
+                group_idx = self.add_parallel_group(
+                    step.label, step_description=step.step_description
                 )
-            self.add_step(
-                step.label,
-                status=step.status,
-                step_description=step.step_description,
+                for sub in step.sub_steps or []:
+                    self.add_parallel_step(
+                        group_idx, sub.label,
+                        status=sub.status,
+                        step_description=sub.step_description,
+                    )
+            else:
+                parent_idx = self.add_step(
+                    step.label, status=step.status,
+                    step_description=step.step_description,
+                )
+                for sub in step.sub_steps or []:
+                    self.add_sub_step(
+                        parent_idx, sub.label,
+                        status=sub.status,
+                        step_description=sub.step_description,
+                    )
+
+    def add_parallel_group(
+        self,
+        label: str,
+        step_description: str | None = None,
+    ) -> int:
+        """Add a parallel group header and return its global index.
+
+        Children added via :meth:`add_parallel_step` run concurrently; the
+        group header's status auto-derives from its children.
+        """
+        idx, node = self._alloc_node(
+            label,
+            StepStatus.PENDING,
+            step_description,
+            is_parallel=True,
+        )
+        self._register_top_level(node)
+        return idx
+
+    def add_parallel_step(
+        self,
+        group_index: int,
+        label: str,
+        status: StepStatus = StepStatus.PENDING,
+        step_description: str | None = None,
+    ) -> int:
+        """Add a child step to a parallel group and return its global index.
+
+        Raises:
+            TypeError: If ``group_index`` does not refer to a parallel group.
+            IndexError: If ``group_index`` is out of range.
+        """
+        parent = self._get_node(group_index)
+        if not parent.is_parallel:
+            raise TypeError(
+                f"index {group_index} is not a parallel group; "
+                "use add_parallel_group first"
             )
+        child_idx, child_node = self._alloc_node(
+            label,
+            status,
+            step_description,
+            parent_idx=group_index,
+        )
+        # Children are embedded in the parent's children list — no Rich task.
+        parent.children.append(child_node)
+        assert parent.task_id is not None
+        self._progress.update(parent.task_id, children=parent.children, refresh=True)
+        return child_idx
 
     def set_step_status(self, index: int, status: StepStatus) -> None:
         """Update the status of any step by global index."""

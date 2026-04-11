@@ -364,3 +364,69 @@ def test_rich_console_renders_stepper() -> None:
     outer = Console(record=True, width=80, legacy_windows=False)
     outer.print(stepper)
     assert "Alpha" in outer.export_text()
+
+
+# ---------------------------------------------------------------------------
+# Task 5: Parallel Group API
+# ---------------------------------------------------------------------------
+
+
+def test_add_parallel_group_returns_index() -> None:
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    idx = stepper.add_parallel_group("Tests")
+    assert isinstance(idx, int)
+
+
+def test_add_parallel_step_returns_child_index() -> None:
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    group_idx = stepper.add_parallel_group("Tests")
+    child_idx = stepper.add_parallel_step(group_idx, "Unit Tests")
+    assert isinstance(child_idx, int)
+    assert child_idx != group_idx
+
+
+def test_add_parallel_step_wrong_target_raises() -> None:
+    """add_parallel_step raises TypeError when target is not a parallel group."""
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    step_idx = stepper.add_step("Regular")
+    with pytest.raises(TypeError):
+        stepper.add_parallel_step(step_idx, "Child")
+
+
+def test_parallel_group_renders_children() -> None:
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    g = stepper.add_parallel_group("Test Suite")
+    stepper.add_parallel_step(g, "Unit Tests", status=StepStatus.COMPLETED)
+    stepper.add_parallel_step(g, "E2E Tests", status=StepStatus.FAILED)
+    console.print(stepper)
+    output = console.export_text()
+    assert "Test Suite" in output
+    assert "Unit Tests" in output
+    assert "E2E Tests" in output
+    assert "├─" in output
+    assert "└─" in output
+
+
+def test_parallel_group_renders_parallel_badge() -> None:
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    g = stepper.add_parallel_group("Run Tests")
+    stepper.add_parallel_step(g, "A")
+    console.print(stepper)
+    output = console.export_text()
+    assert "parallel" in output
+
+
+def test_set_step_status_on_parallel_child() -> None:
+    """set_step_status works on a parallel child via its global index."""
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    g = stepper.add_parallel_group("Tests")
+    child_idx = stepper.add_parallel_step(g, "Unit", status=StepStatus.PENDING)
+    stepper.set_step_status(child_idx, StepStatus.COMPLETED)
+    node = stepper._node_index[child_idx]
+    assert node.status is StepStatus.COMPLETED
