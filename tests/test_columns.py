@@ -12,13 +12,17 @@ from rich.text import Text
 
 from stepper import (
     LogPosition,
-    StepIndicatorColumn,
-    StepLabelColumn,
     StepStatus,
     Stepper,
     StepperTheme,
 )
-from stepper.columns import LogRenderer, StatusMapper, StepperTimeColumn
+from stepper.columns import (
+    LogRenderer,
+    StatusMapper,
+    StepIndicatorColumn,
+    StepLabelColumn,
+    StepperTimeColumn,
+)
 
 
 def _make_task(
