@@ -7,6 +7,7 @@ from rich.progress import ProgressColumn, Task
 from rich.spinner import Spinner
 from rich.text import Text
 
+from stepper.node import StepNode
 from stepper.theme import StepperTheme
 from stepper.types import LogPosition, StepStatus
 
@@ -110,7 +111,7 @@ class StepIndicatorColumn(ProgressColumn):
             connector = self._theme.connector_glyph()
 
             # Count rows contributed by each embedded child (label + description + logs).
-            children: list = task.fields.get("children", [])
+            children: list[StepNode] = task.fields.get("children", [])
             child_rows = sum(
                 1  # child label row
                 + (1 if child.description else 0)
