@@ -105,3 +105,11 @@ Thumbs.db
 
 # Sisyphus
 .sisyphus/
+.superpowers/
+.crush/
+.claude/
+
+*.md
+docs/
+
+!README.md
