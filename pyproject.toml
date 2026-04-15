@@ -7,7 +7,7 @@ packages = ["stepper"]
 
 [project]
 name = "rich-stepper"
-version = "0.2.0"
+version = "0.2.1"
 description = "Beautiful multi-step terminal progress widget for Rich. Connected indicators, per-step logging, elapsed timers, and optional progress bars."
 readme = "README.md"
 requires-python = ">=3.10"

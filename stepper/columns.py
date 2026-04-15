@@ -51,17 +51,37 @@ class LogRenderer:
             return min(total_logs, max_visible)
         return total_logs
 
-    def build_lines(self, logs: list[str], max_visible: int | None) -> list[Text]:
+    def build_lines(
+        self,
+        logs: list[str],
+        max_visible: int | None,
+        tree_prefix: str = "",
+        tree_style: str = "",
+    ) -> list[Text]:
+        """Build styled Text lines from log messages.
+
+        When *tree_prefix* is set (e.g. ``"│ "`` for non-last children),
+        the prefix portion is rendered with *tree_style* while the log
+        text retains the theme's ``log_style``.
+        """
         count = self.visible_count(len(logs), max_visible)
         if count == 0:
             return []
         visible = logs[-count:]
         padding = " " * max(0, self._theme.label_padding)
         prefix = self._theme.log_prefix + " " if self._theme.log_prefix else ""
-        return [
-            Text(f"{padding}{prefix}{msg}", style=self._theme.log_style)
-            for msg in visible
-        ]
+        lines: list[Text] = []
+        for msg in visible:
+            text = Text()
+            if tree_prefix and tree_style:
+                # Tree connector gets its own style (connector_style);
+                # log text keeps log_style.
+                text.append(f"{padding}{tree_prefix}", style=tree_style)
+                text.append(f"{prefix}{msg}", style=self._theme.log_style)
+            else:
+                text.append(f"{padding}{prefix}{msg}", style=self._theme.log_style)
+            lines.append(text)
+        return lines
 
 
 class StepIndicatorColumn(ProgressColumn):
@@ -89,9 +109,7 @@ class StepIndicatorColumn(ProgressColumn):
         log_count = self._log.visible_count(
             len(task.fields.get("logs", [])), max_visible
         )
-        logs_above = (
-            self._theme.log_position is LogPosition.ABOVE and log_count > 0
-        )
+        logs_above = self._theme.log_position is LogPosition.ABOVE and log_count > 0
 
         lines: list[RenderableType] = []
 
@@ -192,11 +210,19 @@ class StepLabelColumn(ProgressColumn):
         # Render embedded children (sub-steps or parallel children) with tree branches.
         children: list = task.fields.get("children", [])
         for i, child in enumerate(children):
-            is_last_child = (i == len(children) - 1)
+            is_last_child = i == len(children) - 1
             branch = (
                 self._theme.tree_branch_last
                 if is_last_child
                 else self._theme.tree_branch_mid
+            )
+            # Tree continuation: │ for non-last children, blank for last.
+            # Width matches the branch glyph so columns align.
+            branch_width = len(branch)
+            tree_cont = (
+                self._theme.connector_symbol + " " * max(0, branch_width - 1)
+                if not is_last_child
+                else " " * branch_width
             )
             child_symbol, child_style = self._status.symbol_and_style(child.status)
             lines.append(
@@ -206,14 +232,22 @@ class StepLabelColumn(ProgressColumn):
                 )
             )
             if child.description:
-                lines.append(
-                    Text(
-                        f"{padding}    {child.description}",
-                        style=self._theme.step_description_style,
-                    )
+                desc_text = Text()
+                desc_text.append(
+                    f"{padding}{tree_cont}  ", style=self._theme.connector_style
                 )
-            # Child logs always render below the child's label row.
-            child_log_lines = self._log.build_lines(child.logs, max_visible)
+                desc_text.append(
+                    child.description, style=self._theme.step_description_style
+                )
+                lines.append(desc_text)
+            # Child logs always render below the child's label row,
+            # with tree continuation connector for non-last children.
+            child_log_lines = self._log.build_lines(
+                child.logs,
+                max_visible,
+                tree_prefix=tree_cont,
+                tree_style=self._theme.connector_style,
+            )
             lines.extend(child_log_lines)
 
         if not is_last:

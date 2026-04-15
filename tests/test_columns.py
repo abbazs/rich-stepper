@@ -332,15 +332,15 @@ def test_label_column_renders_tree_branches_for_children() -> None:
 
     theme = StepperTheme()
     col = StepLabelColumn(theme, StatusMapper(theme), LogRenderer(theme))
-    child1 = StepNode(10, "Unit Tests", StepStatus.COMPLETED, None, [], [], False, 0, None)
+    child1 = StepNode(
+        10, "Unit Tests", StepStatus.COMPLETED, None, [], [], False, 0, None
+    )
     child2 = StepNode(11, "E2E Tests", StepStatus.FAILED, None, [], [], False, 0, None)
     task = _make_task(label="Test Suite", is_last=False)
     task.fields["children"] = [child1, child2]
     task.fields["is_parallel_group"] = True
     result = col.render(task)
-    rendered_text = "".join(
-        r.plain for r in result.renderables if hasattr(r, "plain")
-    )
+    rendered_text = "".join(r.plain for r in result.renderables if hasattr(r, "plain"))
     assert "├─" in rendered_text
     assert "└─" in rendered_text
     assert "Unit Tests" in rendered_text
@@ -357,7 +357,126 @@ def test_label_column_renders_parallel_badge() -> None:
     task.fields["children"] = []
     task.fields["is_parallel_group"] = True
     result = col.render(task)
-    rendered_text = "".join(
-        r.plain for r in result.renderables if hasattr(r, "plain")
-    )
+    rendered_text = "".join(r.plain for r in result.renderables if hasattr(r, "plain"))
     assert "parallel" in rendered_text
+
+
+# ---------------------------------------------------------------------------
+# Tree continuation connector tests
+# ---------------------------------------------------------------------------
+
+
+def test_non_last_child_description_has_tree_connector() -> None:
+    """Non-last child description lines must include │ tree continuation."""
+    from stepper.node import StepNode
+
+    theme = StepperTheme()
+    col = StepLabelColumn(theme, StatusMapper(theme), LogRenderer(theme))
+    child1 = StepNode(
+        1, "Compile", StepStatus.COMPLETED, "42 files", [], [], False, 0, None
+    )
+    child2 = StepNode(2, "Test", StepStatus.PENDING, None, [], [], False, 0, None)
+    task = _make_task(label="Build", is_last=False)
+    task.fields["children"] = [child1, child2]
+    result = col.render(task)
+    renderables = result.renderables
+    # Row 0: parent label, Row 1: child1 label (├─), Row 2: child1 description
+    desc_row = renderables[2]
+    assert "│" in desc_row.plain
+    assert "42 files" in desc_row.plain
+
+
+def test_last_child_description_has_no_tree_connector() -> None:
+    """Last child description lines must have blank instead of │."""
+    from stepper.node import StepNode
+
+    theme = StepperTheme()
+    col = StepLabelColumn(theme, StatusMapper(theme), LogRenderer(theme))
+    child1 = StepNode(1, "Compile", StepStatus.COMPLETED, None, [], [], False, 0, None)
+    child2 = StepNode(2, "Test", StepStatus.PENDING, "running", [], [], False, 0, None)
+    task = _make_task(label="Build", is_last=False)
+    task.fields["children"] = [child1, child2]
+    result = col.render(task)
+    renderables = result.renderables
+    # Find the description row for child2 (last child)
+    rendered_text = "".join(r.plain for r in renderables if hasattr(r, "plain"))
+    # Last child's description should NOT have │ continuation
+    lines = rendered_text.split("\n")
+    desc_line = [l for l in lines if "running" in l][0]
+    # The line before "running" should not start with │ for the last child
+    assert "└─" in rendered_text
+
+
+def test_non_last_child_logs_have_tree_connector() -> None:
+    """Non-last child log lines must include │ tree continuation."""
+    from stepper.node import StepNode
+
+    theme = StepperTheme(max_log_rows=3)
+    col = StepLabelColumn(theme, StatusMapper(theme), LogRenderer(theme))
+    child1 = StepNode(
+        1,
+        "Compile",
+        StepStatus.COMPLETED,
+        None,
+        ["file 1", "file 2"],
+        [],
+        False,
+        0,
+        None,
+    )
+    child2 = StepNode(2, "Test", StepStatus.PENDING, None, [], [], False, 0, None)
+    task = _make_task(label="Build", is_last=False)
+    task.fields["children"] = [child1, child2]
+    result = col.render(task)
+    rendered_text = "".join(r.plain for r in result.renderables if hasattr(r, "plain"))
+    # Log lines for non-last child should contain │
+    assert "file 1" in rendered_text
+    log_lines = [l for l in rendered_text.split("\n") if "file" in l]
+    for line in log_lines:
+        assert "│" in line, f"Expected │ in log line: {line!r}"
+
+
+def test_last_child_logs_have_no_tree_connector() -> None:
+    """Last child log lines must have blank instead of │."""
+    from stepper.node import StepNode
+
+    theme = StepperTheme(max_log_rows=3)
+    col = StepLabelColumn(theme, StatusMapper(theme), LogRenderer(theme))
+    child1 = StepNode(1, "Compile", StepStatus.COMPLETED, None, [], [], False, 0, None)
+    child2 = StepNode(
+        2, "Test", StepStatus.PENDING, None, ["passed", "failed"], [], False, 0, None
+    )
+    task = _make_task(label="Build", is_last=False)
+    task.fields["children"] = [child1, child2]
+    result = col.render(task)
+    rendered_text = "".join(r.plain for r in result.renderables if hasattr(r, "plain"))
+    lines = rendered_text.split("\n")
+    # Find log lines for child2 (last child) — after └─ line
+    last_child_idx = next(i for i, l in enumerate(lines) if "└─" in l)
+    log_lines_after_last = lines[last_child_idx + 1 :]
+    for line in log_lines_after_last:
+        if "passed" in line or "failed" in line:
+            # Last child's logs should NOT have │ — they should have spaces
+            stripped = line.lstrip()
+            # The line should start with spaces (tree continuation blank), not │
+            leading = line[: len(stripped)]
+            assert "│" not in leading, f"Last child log should not have │: {line!r}"
+
+
+def test_tree_continuation_width_matches_branch() -> None:
+    """Tree continuation width must match tree_branch_mid/tree_branch_last width."""
+    from stepper.node import StepNode
+
+    # Custom wider branches
+    theme = StepperTheme(tree_branch_mid="├──", tree_branch_last="└──")
+    col = StepLabelColumn(theme, StatusMapper(theme), LogRenderer(theme))
+    child1 = StepNode(
+        1, "A", StepStatus.COMPLETED, "desc", ["log1"], [], False, 0, None
+    )
+    child2 = StepNode(2, "B", StepStatus.PENDING, None, [], [], False, 0, None)
+    task = _make_task(label="Parent", is_last=False)
+    task.fields["children"] = [child1, child2]
+    ic = StepIndicatorColumn(theme, StatusMapper(theme), LogRenderer(theme))
+    ic_rows = len(ic.render(task).renderables)
+    lc_rows = len(col.render(task).renderables)
+    assert ic_rows == lc_rows, f"Indicator={ic_rows}, Label={lc_rows}"
