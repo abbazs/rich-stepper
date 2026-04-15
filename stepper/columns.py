@@ -225,12 +225,10 @@ class StepLabelColumn(ProgressColumn):
                 else " " * branch_width
             )
             child_symbol, child_style = self._status.symbol_and_style(child.status)
-            lines.append(
-                Text(
-                    f"{padding}{branch} {child_symbol}  {child.label}",
-                    style=child_style,
-                )
-            )
+            label_text = Text()
+            label_text.append(f"{padding}{branch} ", style=self._theme.connector_style)
+            label_text.append(f"{child_symbol}  {child.label}", style=child_style)
+            lines.append(label_text)
             if child.description:
                 desc_text = Text()
                 desc_text.append(
