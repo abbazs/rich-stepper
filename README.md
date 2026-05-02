@@ -147,6 +147,30 @@ with Stepper(theme=theme, console=console) as stepper:
         stepper.set_step_status(idx, StepStatus.COMPLETED)
 ```
 
+## Lifecycle Callbacks
+
+Hook into status transitions with optional callbacks:
+
+```python
+def on_start(idx: int, label: str) -> None:
+    print(f"Starting {label}")
+
+def on_complete(idx: int, label: str) -> None:
+    print(f"Finished {label}")
+
+def on_fail(idx: int, label: str, description: str | None) -> None:
+    send_alert(label, description)
+
+stepper = Stepper(
+    steps=steps,
+    on_step_start=on_start,
+    on_step_complete=on_complete,
+    on_step_fail=on_fail,
+)
+```
+
+Callbacks fire synchronously when `set_step_status` (or convenience methods `succeed`/`fail`/`warn`/`skip`) transitions a step.
+
 ## Theming
 
 `StepperTheme` is a frozen dataclass — set any combination of fields at construction:
@@ -227,20 +251,30 @@ Extends `rich.progress.Progress`. All Progress constructor args are forwarded.
 
 | Method | Description |
 |---|---|
-| `Stepper(steps, theme, console, ...)` | Create stepper with optional initial steps and theme |
-| `add_step(label, status, step_description)` | Add a step, returns `TaskID` |
-| `add_steps(steps)` | Add multiple steps from `StepDefinition` list |
-| `set_step_status(index, status)` | Update step status |
-| `set_step_progress(index, percent)` | Set progress bar (0.0–1.0) |
-| `log(index, message)` | Append a log message to a step |
+| `Stepper(steps, theme, console, on_step_start, on_step_complete, on_step_fail, ...)` | Create stepper with optional initial steps, theme, and lifecycle callbacks |
+| `add_step(label, status, step_description)` | Add a top-level step, returns `int` (global index) |
+| `add_steps(steps)` | Add multiple steps from `StepDefinition` list (handles parallel and sub_steps) |
+| `add_parallel_group(label, step_description)` | Add a parallel group header, returns `int` (group index) |
+| `add_parallel_step(group_index, label, status, step_description)` | Add a child to a parallel group, returns `int` (child index) |
+| `add_sub_step(parent_index, label, status, step_description)` | Add a sequential sub-step under a regular step, returns `int` (child index) |
+| `set_step_status(index, status)` | Update step status by global index |
+| `set_step_progress(index, percent)` | Set progress bar (0.0–1.0), top-level steps only |
+| `log(index, message)` | Append a log message to any step |
+| `succeed(index, description)` | Mark step as COMPLETED with optional description |
+| `fail(index, description)` | Mark step as FAILED with optional description |
+| `warn(index, description)` | Mark step as WARNING with optional description |
+| `skip(index, description)` | Mark step as SKIPPED with optional description |
 
 ### `StepStatus`
 
-| Value | Description |
-|---|---|
-| `StepStatus.PENDING` | Not yet started |
-| `StepStatus.ACTIVE` | Currently running |
-| `StepStatus.COMPLETED` | Finished |
+| Value | Symbol | Description |
+|---|---|---|
+| `StepStatus.COMPLETED` | `●` | Step finished successfully |
+| `StepStatus.ACTIVE` | `◉` | Currently running (animated spinner) |
+| `StepStatus.PENDING` | `○` | Not yet started |
+| `StepStatus.FAILED` | `✕` | Step failed |
+| `StepStatus.WARNING` | `⚠` | Completed with warnings |
+| `StepStatus.SKIPPED` | `⊘` | Step was skipped |
 
 ### `LogPosition`
 
@@ -252,8 +286,16 @@ Extends `rich.progress.Progress`. All Progress constructor args are forwarded.
 ### `StepDefinition`
 
 ```python
-StepDefinition(label, status=StepStatus.PENDING, step_description=None)
+StepDefinition(label, status=StepStatus.PENDING, step_description=None, sub_steps=None, parallel=False)
 ```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `label` | `str` | required | Step label |
+| `status` | `StepStatus` | `PENDING` | Initial status |
+| `step_description` | `str \| None` | `None` | Secondary description line |
+| `sub_steps` | `list[StepDefinition] \| None` | `None` | Nested children |
+| `parallel` | `bool` | `False` | If True, creates a parallel group |
 
 ### `StepperTheme`
 
@@ -267,6 +309,16 @@ All fields have sensible defaults. Override any combination:
 | `completed_style` | `str` | `"green"` |
 | `active_style` | `str` | `"cyan bold"` |
 | `pending_style` | `str` | `"bright_black"` |
+| `spinner_name` | `str` | `"dots"` | Rich spinner name for ACTIVE steps |
+| `spinner_speed` | `float` | `1.0` | Spinner animation speed multiplier |
+| `failed_symbol` | `str` | `"✕"` | Symbol for FAILED steps |
+| `failed_style` | `str` | `"red bold"` | Style for FAILED steps |
+| `warning_symbol` | `str` | `"⚠"` | Symbol for WARNING steps |
+| `warning_style` | `str` | `"yellow bold"` | Style for WARNING steps |
+| `skipped_symbol` | `str` | `"⊘"` | Symbol for SKIPPED steps |
+| `skipped_style` | `str` | `"bright_black"` | Style for SKIPPED steps |
+| `tree_branch_mid` | `str` | `"├─"` | Tree branch for non-last children |
+| `tree_branch_last` | `str` | `"└─"` | Tree branch for last child |
 | `connector_symbol` | `str` | `"│"` |
 | `connector_style` | `str` | `"bright_black"` |
 | `line_thickness` | `int` | `1` |
@@ -288,7 +340,7 @@ All fields have sensible defaults. Override any combination:
 
 ## Examples
 
-The `examples/` directory contains 17 runnable scripts covering every feature:
+The `examples/` directory contains 31 runnable scripts covering every feature:
 
 | Example | Description |
 |---|---|
@@ -309,6 +361,20 @@ The `examples/` directory contains 17 runnable scripts covering every feature:
 | `15_step_logging` | Inline log messages |
 | `16_full_featured` | Everything combined |
 | `17_web_scraper` | Real-world web scraper demo |
+| `18_spinner_basics` | Spinner animation with context manager |
+| `19_spinner_gallery` | Multiple spinner types (dots, line, arrow, star, etc.) |
+| `20_ci_pipeline` | CI/CD pipeline: dynamic steps, incremental progress |
+| `21_file_operations` | File operations: incremental progress ticks, detailed logs |
+| `22_data_pipeline` | ETL pipeline: pre-defined steps, Rich Panel summary |
+| `23_api_health_check` | Health check: dynamic steps, error simulation |
+| `24_package_installer` | Package installer: dependency logging, multi-stage progress |
+| `25_database_migration` | Database migration: StepDefinition with splat unpacking |
+| `26_devops_deploy` | Kubernetes deploy: StepDefinition with Rich Table |
+| `27_spinner_speeds` | Spinner speed variations (0.3x to 4.0x) |
+| `28_parallel_groups` | Parallel group creation and auto-derived status |
+| `29_sub_steps` | Sequential sub-steps with tree rendering |
+| `30_failed_warning_skipped` | FAILED/WARNING/SKIPPED status display |
+| `31_log_position_above` | LogPosition.ABOVE with multi-step layout |
 
 Run any example directly:
 
