@@ -41,6 +41,9 @@ class Stepper:
         get_time: Callable[[], float] | None = None,
         disable: bool = False,
         expand: bool = False,
+        on_step_start: Callable[[int, str], None] | None = None,
+        on_step_complete: Callable[[int, str], None] | None = None,
+        on_step_fail: Callable[[int, str, str | None], None] | None = None,
         **kwargs: object,
     ) -> None:
         self.theme = theme or StepperTheme()
@@ -51,6 +54,9 @@ class Stepper:
         # All nodes by globally unique idx (includes children)
         self._node_index: dict[int, StepNode] = {}
         self._next_idx: int = 0
+        self._on_step_start = on_step_start
+        self._on_step_complete = on_step_complete
+        self._on_step_fail = on_step_fail
         self._progress = Progress(
             *self._build_columns(),
             console=console,
@@ -322,6 +328,14 @@ class Stepper:
             )
 
         node.status = status
+
+        # Fire lifecycle callbacks
+        if status is StepStatus.ACTIVE and self._on_step_start is not None:
+            self._on_step_start(index, node.label)
+        elif status is StepStatus.COMPLETED and self._on_step_complete is not None:
+            self._on_step_complete(index, node.label)
+        elif status is StepStatus.FAILED and self._on_step_fail is not None:
+            self._on_step_fail(index, node.label, node.description)
 
         if node.task_id is not None:
             # Top-level node: update Rich task directly.

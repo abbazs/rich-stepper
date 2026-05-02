@@ -670,3 +670,78 @@ def test_succeed_on_parallel_child() -> None:
     stepper.succeed(c2)
     group_node = stepper._node_index[g]
     assert group_node.status is StepStatus.COMPLETED
+
+
+# ---------------------------------------------------------------------------
+# Lifecycle callbacks
+# ---------------------------------------------------------------------------
+
+
+def test_on_step_start_callback_fired() -> None:
+    """on_step_start callback fires when a step transitions to ACTIVE."""
+    console = Console(record=True, width=80, legacy_windows=False)
+    started: list[tuple[int, str]] = []
+    stepper = Stepper(
+        console=console,
+        auto_refresh=False,
+        on_step_start=lambda idx, label: started.append((idx, label)),
+    )
+    idx = stepper.add_step("Build", status=StepStatus.PENDING)
+    stepper.set_step_status(idx, StepStatus.ACTIVE)
+    assert len(started) == 1
+    assert started[0] == (idx, "Build")
+
+
+def test_on_step_complete_callback_fired() -> None:
+    """on_step_complete callback fires when a step transitions to COMPLETED."""
+    console = Console(record=True, width=80, legacy_windows=False)
+    completed: list[tuple[int, str]] = []
+    stepper = Stepper(
+        console=console,
+        auto_refresh=False,
+        on_step_complete=lambda idx, label: completed.append((idx, label)),
+    )
+    idx = stepper.add_step("Build", status=StepStatus.ACTIVE)
+    stepper.set_step_status(idx, StepStatus.COMPLETED)
+    assert len(completed) == 1
+    assert completed[0] == (idx, "Build")
+
+
+def test_on_step_fail_callback_fired() -> None:
+    """on_step_fail callback fires when a step transitions to FAILED."""
+    console = Console(record=True, width=80, legacy_windows=False)
+    failed: list[tuple[int, str, str | None]] = []
+    stepper = Stepper(
+        console=console,
+        auto_refresh=False,
+        on_step_fail=lambda idx, label, description: failed.append((idx, label, description)),
+    )
+    idx = stepper.add_step("Deploy", status=StepStatus.ACTIVE)
+    stepper.fail(idx, description="Timeout")
+    assert len(failed) == 1
+    assert failed[0] == (idx, "Deploy", "Timeout")
+
+
+def test_callbacks_not_fired_when_none() -> None:
+    """No error when callbacks are not provided (default None)."""
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    idx = stepper.add_step("Step", status=StepStatus.PENDING)
+    stepper.set_step_status(idx, StepStatus.ACTIVE)
+    stepper.set_step_status(idx, StepStatus.COMPLETED)
+    # No exception raised
+
+
+def test_callback_on_succeed_method() -> None:
+    """succeed() convenience method also fires on_step_complete callback."""
+    console = Console(record=True, width=80, legacy_windows=False)
+    completed: list[tuple[int, str]] = []
+    stepper = Stepper(
+        console=console,
+        auto_refresh=False,
+        on_step_complete=lambda idx, label: completed.append((idx, label)),
+    )
+    idx = stepper.add_step("Deploy", status=StepStatus.ACTIVE)
+    stepper.succeed(idx, description="Done")
+    assert len(completed) == 1
+    assert completed[0] == (idx, "Deploy")
