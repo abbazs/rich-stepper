@@ -345,6 +345,82 @@ class Stepper:
             else:
                 self._progress.update(parent.task_id, refresh=True)
 
+    def succeed(
+        self, index: int, description: str | None = None
+    ) -> None:
+        """Mark a step as COMPLETED with an optional description update.
+
+        Shortcut for ``set_step_status(index, StepStatus.COMPLETED)``
+        plus an optional ``step_description`` update.
+
+        Raises:
+            ValueError: If ``index`` refers to a parallel group header.
+            IndexError: If ``index`` is out of range.
+        """
+        if description is not None:
+            node = self._get_node(index)
+            node.description = description
+            if node.task_id is not None:
+                self._push_fields(node)
+        self.set_step_status(index, StepStatus.COMPLETED)
+
+    def fail(
+        self, index: int, description: str | None = None
+    ) -> None:
+        """Mark a step as FAILED with an optional description update.
+
+        Shortcut for ``set_step_status(index, StepStatus.FAILED)``
+        plus an optional ``step_description`` update.
+
+        Raises:
+            ValueError: If ``index`` refers to a parallel group header.
+            IndexError: If ``index`` is out of range.
+        """
+        if description is not None:
+            node = self._get_node(index)
+            node.description = description
+            if node.task_id is not None:
+                self._push_fields(node)
+        self.set_step_status(index, StepStatus.FAILED)
+
+    def warn(
+        self, index: int, description: str | None = None
+    ) -> None:
+        """Mark a step as WARNING with an optional description update.
+
+        Shortcut for ``set_step_status(index, StepStatus.WARNING)``
+        plus an optional ``step_description`` update.
+
+        Raises:
+            ValueError: If ``index`` refers to a parallel group header.
+            IndexError: If ``index`` is out of range.
+        """
+        if description is not None:
+            node = self._get_node(index)
+            node.description = description
+            if node.task_id is not None:
+                self._push_fields(node)
+        self.set_step_status(index, StepStatus.WARNING)
+
+    def skip(
+        self, index: int, description: str | None = None
+    ) -> None:
+        """Mark a step as SKIPPED with an optional description update.
+
+        Shortcut for ``set_step_status(index, StepStatus.SKIPPED)``
+        plus an optional ``step_description`` update.
+
+        Raises:
+            ValueError: If ``index`` refers to a parallel group header.
+            IndexError: If ``index`` is out of range.
+        """
+        if description is not None:
+            node = self._get_node(index)
+            node.description = description
+            if node.task_id is not None:
+                self._push_fields(node)
+        self.set_step_status(index, StepStatus.SKIPPED)
+
     def set_step_progress(self, step_index: int, percent: float) -> None:
         """Set the progress bar value for a top-level step (0.0–1.0, clamped).
 

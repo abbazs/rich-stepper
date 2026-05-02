@@ -578,3 +578,95 @@ def test_add_steps_parallel_dispatch() -> None:
     assert "Unit Tests" in output
     assert "E2E Tests" in output
     assert "parallel" in output
+
+
+# ---------------------------------------------------------------------------
+# Semantic convenience methods
+# ---------------------------------------------------------------------------
+
+
+def test_succeed_sets_completed() -> None:
+    """succeed() sets COMPLETED status and optional description."""
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    idx = stepper.add_step("Deploy", status=StepStatus.ACTIVE)
+    stepper.succeed(idx)
+    node = stepper._node_index[idx]
+    assert node.status is StepStatus.COMPLETED
+
+
+def test_succeed_with_description() -> None:
+    """succeed() updates step_description when provided."""
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    idx = stepper.add_step("Deploy", status=StepStatus.ACTIVE)
+    stepper.succeed(idx, description="Deployed to prod")
+    console.print(stepper)
+    output = console.export_text()
+    assert "Deployed to prod" in output
+
+
+def test_fail_sets_failed_status() -> None:
+    """fail() sets FAILED status and optional description."""
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    idx = stepper.add_step("Connect", status=StepStatus.ACTIVE)
+    stepper.fail(idx, description="Connection refused")
+    node = stepper._node_index[idx]
+    assert node.status is StepStatus.FAILED
+    assert node.description == "Connection refused"
+
+
+def test_warn_sets_warning_status() -> None:
+    """warn() sets WARNING status and optional description."""
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    idx = stepper.add_step("Check API", status=StepStatus.ACTIVE)
+    stepper.warn(idx, description="Deprecated endpoint")
+    node = stepper._node_index[idx]
+    assert node.status is StepStatus.WARNING
+    assert node.description == "Deprecated endpoint"
+
+
+def test_skip_sets_skipped_status() -> None:
+    """skip() sets SKIPPED status and optional description."""
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    idx = stepper.add_step("Cache warm", status=StepStatus.PENDING)
+    stepper.skip(idx, description="Already warm")
+    node = stepper._node_index[idx]
+    assert node.status is StepStatus.SKIPPED
+    assert node.description == "Already warm"
+
+
+def test_convenience_methods_render_correct_symbols() -> None:
+    """Each convenience method renders the correct status symbol."""
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    s0 = stepper.add_step("A", status=StepStatus.ACTIVE)
+    s1 = stepper.add_step("B", status=StepStatus.ACTIVE)
+    s2 = stepper.add_step("C", status=StepStatus.ACTIVE)
+    s3 = stepper.add_step("D", status=StepStatus.PENDING)
+    stepper.succeed(s0)
+    stepper.fail(s1)
+    stepper.warn(s2)
+    stepper.skip(s3)
+    console.print(stepper)
+    output = console.export_text()
+    assert "●" in output   # COMPLETED
+    assert "✕" in output   # FAILED
+    assert "⚠" in output   # WARNING
+    assert "⊘" in output   # SKIPPED
+
+
+def test_succeed_on_parallel_child() -> None:
+    """succeed() on a parallel child auto-derives parent group status."""
+    console = Console(record=True, width=80, legacy_windows=False)
+    stepper = Stepper(console=console, auto_refresh=False)
+    g = stepper.add_parallel_group("Tests")
+    c1 = stepper.add_parallel_step(g, "Unit", status=StepStatus.ACTIVE)
+    c2 = stepper.add_parallel_step(g, "E2E", status=StepStatus.PENDING)
+    stepper.succeed(c1)
+    stepper.succeed(c2)
+    group_node = stepper._node_index[g]
+    assert group_node.status is StepStatus.COMPLETED
